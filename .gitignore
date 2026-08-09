@@ -1,0 +1,12 @@
+node_modules/
+__pycache__/
+.venv/
+venv/
+*.pyc
+.env
+.env.local
+job_agent_data/
+launchpad_data/
+.next/
+dist/
+build/
