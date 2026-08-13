@@ -51,10 +51,18 @@ export function isEntryLevel(title: string): boolean {
 
 export type ScoreTone = "excellent" | "good" | "fair" | "poor";
 
+// Backend contract: `Evaluation.score` is a 1-5 float, NOT a 0-100 percentage
+// (see backend/app/evaluate/evaluator.py — the rubric prompt asks for
+// "score (1-5 float)"). Keep this constant as the single source of truth for
+// the scale so ScoreDial's arc math and this tone mapping can never drift
+// apart the way they did before (dial divided by 100, tone thresholds were
+// 80/60/40 — a perfect 5.0 rendered as a 5% red arc labeled "poor").
+export const SCORE_MAX = 5;
+
 export function scoreTone(score: number): ScoreTone {
-  if (score >= 80) return "excellent";
-  if (score >= 60) return "good";
-  if (score >= 40) return "fair";
+  if (score >= 4.0) return "excellent";
+  if (score >= 3.0) return "good";
+  if (score >= 2.0) return "fair";
   return "poor";
 }
 

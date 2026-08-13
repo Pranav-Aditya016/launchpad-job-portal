@@ -34,6 +34,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [tailorError, setTailorError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyOpened, setApplyOpened] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [evaluateError, setEvaluateError] = useState<string | null>(null);
 
   async function loadJob() {
     const jobs = await getJobs();
@@ -59,9 +61,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   async function handleEvaluate() {
     setEvaluating(true);
+    setEvaluateError(null);
     try {
       await evaluate({ job_ids: [id] });
       await loadJob();
+    } catch (e) {
+      setEvaluateError(
+        e instanceof ApiError ? e.message : "Couldn't evaluate this job. Please try again."
+      );
     } finally {
       setEvaluating(false);
     }
@@ -82,6 +89,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
   }
 
+  // Only http(s) URLs are safe to hand to window.open — job URLs originate
+  // from third-party feeds and markdown-link extraction (crawl4ai), so a
+  // malformed or malicious `javascript:`/`data:` URL is not impossible.
+  const SAFE_URL = /^https?:\/\//i;
+
   // Assisted apply only: this fetches the real destination URL from the
   // backend, then opens it in a brand-new tab the user drives themselves.
   // Nothing here ever submits a form or posts an application on the user's
@@ -89,10 +101,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   async function handleApply() {
     if (!job) return;
     setApplying(true);
+    setApplyError(null);
     try {
       const res = await apply(id);
+      if (!SAFE_URL.test(res.url)) {
+        setApplyError("This job's apply link looks unsafe, so it wasn't opened.");
+        return;
+      }
       window.open(res.url, "_blank", "noopener");
       setApplyOpened(true);
+    } catch (e) {
+      setApplyError(
+        e instanceof ApiError ? e.message : "Couldn't open the apply page. Please try again."
+      );
     } finally {
       setApplying(false);
     }
@@ -143,7 +164,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <div className="flex flex-wrap items-center gap-2">
                 {ev?.scam_flag && <Badge tone="danger">Possible scam</Badge>}
                 {ev?.no_sponsorship && <Badge tone="warning">No sponsorship</Badge>}
+                {job.sponsorship_ok === true && (
+                  <Badge tone="neutral">Sponsorship likely OK</Badge>
+                )}
                 {entryLevel && <Badge tone="success">Entry level</Badge>}
+                {job.applied && <Badge tone="accent">Applied</Badge>}
                 <Badge tone="neutral">{job.source}</Badge>
                 {posted && <span className="text-caption text-muted">Posted {posted}</span>}
               </div>
@@ -218,6 +243,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   <Button onClick={handleEvaluate} loading={evaluating} size="sm">
                     Evaluate this job
                   </Button>
+                  {evaluateError && (
+                    <p className="text-caption text-danger">{evaluateError}</p>
+                  )}
                 </>
               )}
             </section>
@@ -244,6 +272,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   </motion.p>
                 )}
               </AnimatePresence>
+              {applyError && <p className="text-caption text-danger">{applyError}</p>}
 
               <div className="border-t border-[color:var(--border)] pt-4 flex flex-col gap-3">
                 <Button

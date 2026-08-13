@@ -38,6 +38,12 @@ export interface Job {
   description: string;
   posted: string | null;
   evaluation: Evaluation | null;
+  // Visa-sponsorship SIGNAL (see backend/app/sources/visa.py) — a soft
+  // ranking input, not a hard filter. Optional because older cached job
+  // records (or a backend that hasn't been redeployed yet) may not have it.
+  sponsorship_ok?: boolean;
+  // Whether the user has already used /apply/{id} for this job.
+  applied?: boolean;
 }
 
 export interface CrawlUrl {
@@ -66,6 +72,8 @@ export interface EvaluateRequest {
 
 export interface EvaluateResponse {
   evaluated: number;
+  failed?: number;
+  warnings?: string[];
 }
 
 export interface TailorResponse {

@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from app import config, store
 from app.evaluate import evaluator
 from app.ingest import resume
-from app.sources import aggregators, careerops_scan, crawl_adapter, experience
+from app.sources import aggregators, careerops_scan, crawl_adapter, experience, visa
 from app.tailor import writer
 
 try:
@@ -40,7 +41,13 @@ async def upload_resume(file: UploadFile = File(...)):
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
     try:
-        profile = resume.ingest(tmp_path)
+        # resume.ingest does sync markitdown parsing + a sync Anthropic call;
+        # run it off the event loop so a slow/large upload doesn't freeze
+        # every other request for the duration of the call.
+        try:
+            profile = await asyncio.to_thread(resume.ingest, tmp_path)
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
         store.save_profile(profile)
     finally:
         tmp_path.unlink(missing_ok=True)
@@ -86,7 +93,10 @@ async def scan(req: ScanRequest = ScanRequest()):
     # it, record a short warning, and keep going with whatever other sources
     # succeed.
     try:
-        jobs.extend(careerops_scan.run_scan(profile, req.ats, req.since_days))
+        # run_scan shells out via subprocess.run(..., timeout=1200) — sync and
+        # blocking. Run it in a worker thread so a multi-minute scan doesn't
+        # freeze the event loop (and every other request) for its duration.
+        jobs.extend(await asyncio.to_thread(careerops_scan.run_scan, profile, req.ats, req.since_days))
     except Exception as e:
         warnings.append(_short_error("careerops", e))
 
@@ -142,11 +152,18 @@ async def scan(req: ScanRequest = ScanRequest()):
 @app.get("/jobs")
 def list_jobs():
     jobs = store.load_jobs()
+    applied = store.applied_ids()
     result = []
     for j in jobs:
         ev = store.load_evaluation(j.id)
         d = j.model_dump()
         d["evaluation"] = ev.model_dump() if ev else None
+        d["applied"] = j.id in applied
+        # Visa-sponsorship SIGNAL (spec: user is an Indian citizen targeting
+        # Germany/US/UK) — a primary ranking input, not a filter. See
+        # app/sources/visa.py::needs_sponsorship_ok for the "not a hard gate"
+        # contract.
+        d["sponsorship_ok"] = visa.needs_sponsorship_ok(j, ev)
         result.append(d)
 
     def sort_key(d):
@@ -171,13 +188,27 @@ def evaluate(req: EvaluateRequest = EvaluateRequest()):
     if req.job_ids is not None:
         jobs = [j for j in jobs if j.id in req.job_ids]
 
-    count = 0
+    evaluated = 0
+    failed = 0
+    warnings: list[str] = []
     for j in jobs:
-        if store.load_evaluation(j.id) is None:
+        if store.load_evaluation(j.id) is not None:
+            continue
+        try:
             e = evaluator.evaluate(profile, j)
-            store.save_evaluation(e)
-            count += 1
-    return {"evaluated": count}
+        except RuntimeError as exc:
+            # Config error (e.g. missing ANTHROPIC_API_KEY) — not a per-job
+            # problem, it will fail identically for every remaining job.
+            # Surface it immediately as a clean 400 instead of burning
+            # through the whole batch first.
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as e:
+            failed += 1
+            warnings.append(_short_error(f"evaluate:{j.id}", e))
+            continue
+        store.save_evaluation(e)
+        evaluated += 1
+    return {"evaluated": evaluated, "failed": failed, "warnings": warnings}
 
 
 @app.post("/tailor/{job_id}")
@@ -200,7 +231,10 @@ def tailor(job_id: str):
     # successfully, and never let a renderer failure (missing native GTK
     # libs, etc.) take down the whole request. See the `pdf` import guard
     # at the top of this module.
-    doc = writer.tailor(profile, job, evaluation)
+    try:
+        doc = writer.tailor(profile, job, evaluation)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     pdf_url = None
     pdf_available = False

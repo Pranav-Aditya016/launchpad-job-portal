@@ -5,7 +5,17 @@ from app import config as cfg
 _client = None
 def _c():
     global _client
-    if _client is None: _client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    if _client is None:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            # A bare os.environ[...] KeyError here used to surface as an opaque
+            # 500 on the very first /evaluate or /tailor call (the most likely
+            # first-run failure). Raise something callers can recognize and
+            # map to a clean 400 instead (see app/api.py).
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set — required for evaluation and tailoring"
+            )
+        _client = Anthropic(api_key=api_key)
     return _client
 
 _FENCE = re.compile(r"^```[a-zA-Z0-9]*\s*\n?(.*?)\n?```$", re.DOTALL)

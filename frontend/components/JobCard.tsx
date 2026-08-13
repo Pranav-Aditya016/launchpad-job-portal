@@ -38,7 +38,11 @@ export function JobCard({ job }: JobCardProps) {
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {ev?.scam_flag && <Badge tone="danger">Possible scam</Badge>}
           {ev?.no_sponsorship && <Badge tone="warning">No sponsorship</Badge>}
+          {job.sponsorship_ok === true && (
+            <Badge tone="neutral">Sponsorship likely OK</Badge>
+          )}
           {entryLevel && <Badge tone="success">Entry level</Badge>}
+          {job.applied && <Badge tone="accent">Applied</Badge>}
           <Badge tone="neutral">{job.source}</Badge>
           {posted && <span className="text-caption text-muted">{posted}</span>}
         </div>

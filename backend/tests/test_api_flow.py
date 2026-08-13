@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 import app.api as api
-from app.models import Profile, Job, job_id
+from app.models import Evaluation, Profile, Job, job_id
 
 
 async def _no_aggregators(*a, **k):
@@ -55,3 +55,78 @@ def test_scan_reports_careerops_failure_but_still_returns_other_sources(tmp_path
     assert body["added"] == 1
     assert body["total"] == 1
     assert any("careerops" in w for w in body["warnings"])
+
+
+def test_evaluate_one_bad_job_does_not_abort_the_batch(tmp_path, monkeypatch):
+    # Regression test: /evaluate used to have no per-job guard, so one LLM
+    # failure (rate limit, malformed JSON, network blip) 500'd the entire
+    # request and threw away every evaluation already done in that batch.
+    # This must degrade gracefully — 200, per-job success/failure counts,
+    # short warnings for the failures — no network/key needed since
+    # api.evaluator.evaluate itself is monkeypatched.
+    monkeypatch.setattr(api.store.cfg, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(api.store, "load_profile", lambda: Profile(name="A"))
+
+    good = Job(id=job_id("gh", "good", "https://good/apply"), source="gh",
+               company="good", title="ML", url="https://good/apply")
+    bad = Job(id=job_id("gh", "bad", "https://bad/apply"), source="gh",
+              company="bad", title="ML", url="https://bad/apply")
+    monkeypatch.setattr(api.store, "load_jobs", lambda: [good, bad])
+    # Neither job has a saved evaluation yet, and saving is a no-op for this
+    # test — same isolation pattern as test_tailor_route.py, so we never
+    # touch the real (non-tmp_path) EVAL_DIR that api.store.load_evaluation
+    # reads/writes via cfg.EVAL_DIR directly.
+    monkeypatch.setattr(api.store, "load_evaluation", lambda job_id: None)
+    monkeypatch.setattr(api.store, "save_evaluation", lambda e: None)
+
+    def _flaky_evaluate(profile, job):
+        if job.id == bad.id:
+            # A per-job failure (e.g. malformed LLM JSON, rate limit) — NOT
+            # RuntimeError, which api.py treats as a systemic config error
+            # (missing ANTHROPIC_API_KEY) and maps to an immediate 400
+            # instead of a per-job warning.
+            raise ValueError("could not parse LLM response")
+        return Evaluation(job_id=job.id, score=4.0, summary="s", cv_match="m")
+
+    monkeypatch.setattr(api.evaluator, "evaluate", _flaky_evaluate)
+
+    c = TestClient(api.app)
+    res = c.post("/evaluate", json={})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["evaluated"] == 1
+    assert body["failed"] == 1
+    assert body["warnings"] and any(bad.id in w for w in body["warnings"])
+
+
+def test_jobs_includes_sponsorship_ok_and_applied(monkeypatch):
+    # Regression test: visa.needs_sponsorship_ok was implemented + unit
+    # tested but never wired into any route (dead code) — a primary ranking
+    # input the user (Indian citizen targeting DE/US/UK) never actually saw.
+    # Same story for store.applied_ids(): written on /apply, never read back.
+    india_job = Job(id=job_id("gh", "in-co", "https://in/apply"), source="gh",
+                     company="in-co", title="ML", url="https://in/apply",
+                     location="Bengaluru, India")
+    us_job = Job(id=job_id("gh", "us-co", "https://us/apply"), source="gh",
+                 company="us-co", title="ML", url="https://us/apply",
+                 location="San Francisco, CA")
+    monkeypatch.setattr(api.store, "load_jobs", lambda: [india_job, us_job])
+
+    no_sponsorship_eval = Evaluation(job_id=us_job.id, score=3.0, summary="s",
+                                      cv_match="m", no_sponsorship=True)
+
+    def _load_evaluation(job_id):
+        return no_sponsorship_eval if job_id == us_job.id else None
+
+    monkeypatch.setattr(api.store, "load_evaluation", _load_evaluation)
+    monkeypatch.setattr(api.store, "applied_ids", lambda: {india_job.id})
+
+    c = TestClient(api.app)
+    res = c.get("/jobs")
+    assert res.status_code == 200
+    by_id = {j["id"]: j for j in res.json()}
+
+    assert by_id[india_job.id]["sponsorship_ok"] is True
+    assert by_id[india_job.id]["applied"] is True
+    assert by_id[us_job.id]["sponsorship_ok"] is False
+    assert by_id[us_job.id]["applied"] is False

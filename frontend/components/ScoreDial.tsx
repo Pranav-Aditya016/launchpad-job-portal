@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { scoreTone } from "@/lib/utils";
+import { scoreTone, SCORE_MAX } from "@/lib/utils";
 
 const TONE_VAR: Record<string, string> = {
   excellent: "var(--success)",
@@ -21,15 +21,20 @@ interface ScoreDialProps {
 // guidance that bounce is reserved for momentum the user themselves imparted.
 export function ScoreDial({ score, size = 56, strokeWidth = 5 }: ScoreDialProps) {
   const reduceMotion = useReducedMotion();
-  const clamped = Math.max(0, Math.min(100, score));
+  // Score is 1-5 (see SCORE_MAX doc comment in lib/utils.ts) — NOT 0-100.
+  const clamped = Math.max(0, Math.min(SCORE_MAX, score));
   const tone = scoreTone(clamped);
   const color = TONE_VAR[tone];
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - clamped / 100);
+  const offset = circumference * (1 - clamped / SCORE_MAX);
 
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
+    <div
+      className="relative shrink-0"
+      style={{ width: size, height: size }}
+      title={`${clamped.toFixed(1)} / ${SCORE_MAX}`}
+    >
       <svg width={size} height={size} className="-rotate-90">
         <circle
           cx={size / 2}
@@ -58,10 +63,11 @@ export function ScoreDial({ score, size = 56, strokeWidth = 5 }: ScoreDialProps)
         />
       </svg>
       <div
-        className="absolute inset-0 flex items-center justify-center text-[0.8125rem] font-bold tabular-nums"
+        className="absolute inset-0 flex flex-col items-center justify-center leading-none"
         style={{ color }}
       >
-        {Math.round(clamped)}
+        <span className="text-[0.8125rem] font-bold tabular-nums">{clamped.toFixed(1)}</span>
+        <span className="text-[0.5rem] font-semibold tabular-nums opacity-70">/{SCORE_MAX}</span>
       </div>
     </div>
   );
