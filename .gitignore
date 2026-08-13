@@ -10,3 +10,4 @@ launchpad_data/
 .next/
 dist/
 build/
+*.egg-info/
