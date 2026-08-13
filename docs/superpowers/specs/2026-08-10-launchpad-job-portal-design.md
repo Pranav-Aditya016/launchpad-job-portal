@@ -65,9 +65,19 @@ treat it as an engine behind a stable subprocess boundary.
    extracts a structured profile (identity, skills, roles, proof points, work-auth
    status). Output conforms to a schema informed by Google's Open Knowledge Format
    (OKF) review. *Deferred: Unlimited-OCR (GPU) and airllm (local large models).*
-2. **Source layer** — career-ops portal scan (Greenhouse / Ashby / Lever / Wellfound /
-   100+ preconfigured companies) **+** a crawl4ai adapter for extra public pages.
-   Public sources only in v1.
+2. **Source layer** — three legs, all public/no-login:
+   (a) career-ops reverse-ATS scan across Greenhouse / Lever / Ashby / Workday / iCIMS
+   (~8k company boards);
+   (b) a **multi-aggregator layer** pulling from free public job APIs — Remotive,
+   Arbeitnow, RemoteOK, Jobicy, The Muse (has an explicit `level=Entry Level` filter) —
+   with more addable, plus opt-in key-gated providers (Adzuna, USAJobs) when the user
+   supplies a free key;
+   (c) a crawl4ai adapter for extra public listing pages.
+   An **experience-level filter** (`is_entry_level`) surfaces fresher / 0–2-year /
+   intern / new-grad / junior / associate roles and screens out senior/staff/lead/
+   manager/director titles, so the default listing is fresher-friendly.
+   Public sources only; login-gated boards (Internshala/Unstop/Handshake) remain a
+   later, user's-own-cookie, opt-in add-on.
 3. **Ranking / evaluation** — career-ops A–G reasoning rubric, including Block G
    scam/ghost-job detection and the no-sponsorship / work-auth hard-blocker flag
    (covers the user's H1B concern).
@@ -127,3 +137,16 @@ Anthropic / Ollama; the user's Anthropic path already exists). Runs locally.
 
 No accounts, no cloud database, no auto-submit, no login-bypass, no local heavy
 models. One local user, file-based state, Anthropic for reasoning.
+
+## 11. Decisions log (updated during execution)
+
+- **2026-08-10 — PDF engine:** keep WeasyPrint (best CSS fidelity for the
+  Apple-styled CV). It needs the GTK runtime on Windows — documented as a one-time
+  setup step; the frontend also offers a zero-dependency browser "print to PDF"
+  fallback. Not swapping engines.
+- **2026-08-10 — Resume OCR:** markitdown stays the default; swap to
+  baidu/Unlimited-OCR only if live parsing of real resumes shows errors.
+- **2026-08-10 — Source breadth (new requirement):** add a multi-aggregator layer
+  (Remotive, Arbeitnow, RemoteOK, Jobicy, The Muse) + an `is_entry_level` filter so
+  the default listing favours fresher / 0–2-year / intern / new-grad roles. All
+  public/no-login. Implemented as the added plan task.
