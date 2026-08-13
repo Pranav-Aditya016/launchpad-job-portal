@@ -11,3 +11,4 @@ launchpad_data/
 dist/
 build/
 *.egg-info/
+.superpowers/
