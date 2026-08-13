@@ -1051,6 +1051,91 @@ async def fetch_all(query: str = "", providers=None, fresher_only: bool = True) 
   fresher filter yields real junior roles; note results in the report. Providers that are
   down that day are tolerated (per-source non-fatal). Commit.
 
+### Step 5: Country coverage (India + Germany) + visa/sponsorship — Adzuna provider
+
+> Requirement: the user is an Indian citizen — needs India-based roles, plus Germany and
+> other countries WHERE VISA SPONSORSHIP IS AVAILABLE. Adzuna is one free API key that
+> covers India (`in`), Germany (`de`), UK (`gb`), US (`us`) and more with real onshore
+> listings — the best single addition for country breadth. It is OPT-IN: skipped unless
+> the user sets `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` (free from developer.adzuna.com).
+
+- [ ] Add `parse_adzuna(data: dict, country: str) -> list[Job]` to `aggregators.py`:
+
+```python
+def parse_adzuna(data: dict, country: str) -> list[Job]:
+    out = []
+    for j in data.get("results", []):
+        url = j.get("redirect_url", "")
+        company = (j.get("company") or {}).get("display_name", "")
+        loc = (j.get("location") or {}).get("display_name", "")
+        out.append(Job(id=job_id("adzuna", company, url), source=f"adzuna-{country}",
+            company=company, title=j.get("title",""), location=loc, url=url,
+            description=_clean(j.get("description","")), posted=j.get("created")))
+    return out
+```
+
+- [ ] Add a country-aware Adzuna fetch and fold it into `fetch_all`. Default countries
+  include India and Germany:
+
+```python
+import os
+ADZUNA_COUNTRIES = ["in", "de", "gb", "us"]   # India + Germany first
+
+async def fetch_adzuna(client, query: str = "", countries=None) -> list[Job]:
+    app_id, app_key = os.environ.get("ADZUNA_APP_ID"), os.environ.get("ADZUNA_APP_KEY")
+    if not (app_id and app_key):
+        return []  # opt-in: no key, no call
+    jobs = []
+    for c in (countries or ADZUNA_COUNTRIES):
+        url = (f"https://api.adzuna.com/v1/api/jobs/{c}/search/1"
+               f"?app_id={app_id}&app_key={app_key}&results_per_page=50"
+               f"&max_days_old=30&what={query or 'engineer'}")
+        try:
+            r = await client.get(url); r.raise_for_status()
+            jobs.extend(parse_adzuna(r.json(), c))
+        except Exception:
+            continue
+    return jobs
+```
+
+  In `fetch_all`, after the no-key providers loop, also `jobs.extend(await fetch_adzuna(client, query, countries))`. Keep `fresher_only` filtering applied to the combined result. Add a `test_parse_adzuna` unit test against a trimmed `backend/tests/fixtures/agg_adzuna.json` fixture (assert `source` starts with `"adzuna-"`, real url/company).
+- [ ] **Commit:** `git commit -am "feat: Adzuna multi-country provider (India/Germany/visa countries, opt-in key)"`
+
+### Step 6: Visa-sponsorship signal + named niche sites (h1bvisajobs, TrueUp, Absolute Internship)
+
+- [ ] **Sponsorship awareness.** The evaluator already emits `no_sponsorship` (Task 7).
+  Add `experience.needs_sponsorship_ok(job, citizen_country="IN") -> bool` helper in a
+  small `sources/visa.py`: returns True if the job is in the citizen's country (India),
+  OR is remote, OR comes from a sponsor-friendly source (see below), OR its evaluation
+  doesn't set `no_sponsorship`. This is a SIGNAL for ranking/filtering, not a hard gate.
+  Unit-test it with a couple of Job cases (India job → True; US job flagged no_sponsorship
+  → False; source `h1bvisajobs` → True).
+- [ ] **Named niche sites as curated crawl sources.** Add to `aggregators.py` (or a new
+  `sources/curated.py`) a registry used via the existing `crawl_adapter.fetch_jobs`:
+
+```python
+# Best-effort public-page crawl targets. Brittle (JS-heavy, markup changes) —
+# per-source non-fatal; treated as a bonus on top of the reliable API providers.
+CURATED_CRAWL_SOURCES = [
+    {"company": "h1bvisajobs", "url": "https://www.h1bvisajobs.com/jobs",
+     "sponsor_friendly": True},   # US roles from H1B-sponsoring employers
+    {"company": "trueup",       "url": "https://www.trueup.io/jobs"},
+    {"company": "absolute-internship", "url": "https://absoluteinternship.com/internships/"},
+]
+SPONSOR_FRIENDLY_SOURCES = {"h1bvisajobs"}
+```
+
+  Wire a `crawl_curated: bool = False` option into `/scan`: when true, iterate
+  `CURATED_CRAWL_SOURCES` calling `crawl_adapter.fetch_jobs(url, company)`, tag jobs from
+  `SPONSOR_FRIENDLY_SOURCES`, extend the results (per-source failures ignored).
+- [ ] **Honesty caveat (put in the report and Task 13 docs):** these three sites have no
+  public API and are JS-heavy; markdown-link extraction is best-effort and may capture
+  noise or need per-site selectors later. They supplement — they do not replace — the
+  reliable API providers (career-ops ATS + Adzuna + remote aggregators). Absolute
+  Internship is a paid placement PROGRAM, not a standard job board, so yield may be low.
+- [ ] **Run** `cd backend && python -m pytest -v` — full suite green (skips allowed).
+- [ ] **Commit:** `git commit -am "feat: visa-sponsorship signal + curated niche crawl sources (h1bvisajobs/trueup/absolute-internship)"`
+
 ---
 
 ## Self-Review
