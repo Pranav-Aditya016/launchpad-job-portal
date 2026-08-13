@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: launchpad-backend
+Version: 0.1.0
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn[standard]>=0.29
+Requires-Dist: httpx>=0.27
+Requires-Dist: pydantic>=2.6
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: anthropic>=0.39
+Requires-Dist: markitdown>=0.0.1a2
+Requires-Dist: weasyprint>=61
+Requires-Dist: crawl4ai>=0.4
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
