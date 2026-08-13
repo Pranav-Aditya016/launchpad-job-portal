@@ -25,3 +25,9 @@ def test_parse_jobicy():
 def test_parse_themuse():
     jobs = a.parse_themuse(_load("agg_themuse.json"))
     assert jobs and all(j.source == "themuse" and j.url for j in jobs)
+
+def test_parse_adzuna():
+    jobs = a.parse_adzuna(_load("agg_adzuna.json"), "in")
+    assert jobs and all(j.source.startswith("adzuna-") and j.url and j.company for j in jobs)
+    assert jobs[0].url.startswith("http")
+    assert jobs[0].company == "Infosys Limited"
