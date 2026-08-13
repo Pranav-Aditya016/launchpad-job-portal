@@ -86,27 +86,65 @@ def _normalize_raw_offers(raw_offers: list[dict]) -> list[dict]:
     return normalized
 
 
+def _extract_json_payload(stdout: str) -> dict:
+    """Robustly parse the `--json` stdout payload.
+
+    Verified against a real (Task 11) invocation that `--json` mode routes ALL
+    human-readable logging through `console.error` (stderr) — see
+    `scan-ats-full.mjs` line 608 (`const log = opts.json ? console.error : ...`)
+    and line 609 (`progress` only writes to stdout when `!opts.json`) — so
+    stdout should already be a single clean JSON object with nothing else
+    mixed in. As a defensive measure against any stray output (e.g. a
+    misbehaving dependency printing a warning to stdout), this slices from the
+    first `{` before parsing rather than assuming byte 0 is the payload start.
+    """
+    start = stdout.find("{")
+    if start == -1:
+        raise ValueError(f"no JSON object found in scan stdout: {stdout[:500]!r}")
+    return json.loads(stdout[start:])
+
+
 def run_scan(profile, ats: list[str] | None = None, since_days: int = 7) -> list[Job]:
     """Run the career-ops reverse-ATS scan for `profile` and return normalized Jobs.
 
     Writes `portals.yml` into ENGINE_DIR before invoking the scanner (required —
     see `write_portals_yml`/task-4-report.md), then runs `scan-ats-full.mjs
-    --json` and parses its stdout, mapping RAW offer fields to the normalized
-    shape per `_normalize_raw_offers` (sourced from task-4-report.md's
-    characterization of the `--json` output).
+    --dry-run --json` and parses its stdout, mapping RAW offer fields to the
+    normalized shape per `_normalize_raw_offers`.
+
+    `--dry-run` is passed deliberately (Task 11 finding): without it, a
+    successful sweep with matches writes to the vendored engine's own
+    `data/scan-history.tsv` / markdown digest / checkpoint files (see
+    `scan-ats-full.mjs` line ~975, `if (offers.length && !opts.dryRun) { ... }`)
+    — state we do not want LaunchPad mutating as a side effect of a read-only
+    scan. `--dry-run` does not change the `--json` output shape or the set of
+    offers found; it only skips that persistence step.
+
+    Task 11 finding: contrary to Task 5's assumption, `--json` stdout is a
+    single JSON OBJECT (`{date, sources, ..., offers: [...]}`), not a bare
+    array of offers — confirmed against a real invocation. The offer array is
+    read from the `offers` key before normalization.
     """
     ats = ats or DEFAULT_ATS
     write_portals_yml(profile, cfg.ENGINE_DIR / "portals.yml")
 
     result = subprocess.run(
-        ["node", "scan-ats-full.mjs", "--ats", ",".join(ats), "--since", str(since_days), "--json"],
+        [
+            "node", "scan-ats-full.mjs",
+            "--ats", ",".join(ats),
+            "--since", str(since_days),
+            "--dry-run",
+            "--json",
+        ],
         cwd=cfg.ENGINE_DIR,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=1200,
         check=True,
     )
 
-    raw_offers = json.loads(result.stdout)
+    payload = _extract_json_payload(result.stdout)
+    raw_offers = payload.get("offers", [])
     normalized = _normalize_raw_offers(raw_offers)
     return parse_scan_output(json.dumps(normalized))
