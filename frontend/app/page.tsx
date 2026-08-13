@@ -178,17 +178,7 @@ export default function UploadPage() {
               )}
               <ProfileCard profile={profile} onChange={setProfile} />
               <div className="flex items-center gap-3">
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    try {
-                      localStorage.setItem("launchpad:profile", JSON.stringify(profile));
-                    } catch {
-                      // localStorage unavailable — non-fatal, dashboard still works
-                    }
-                    router.push("/dashboard");
-                  }}
-                >
+                <Button size="lg" onClick={() => router.push("/dashboard")}>
                   Continue to dashboard
                 </Button>
                 <Button variant="ghost" onClick={() => setStage("empty")}>

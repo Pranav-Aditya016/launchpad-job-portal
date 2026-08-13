@@ -103,11 +103,20 @@ async def fetch_adzuna(client: httpx.AsyncClient, query: str = "", countries=Non
         return []
     jobs: list[Job] = []
     for c in (countries or ADZUNA_COUNTRIES):
-        url = (f"https://api.adzuna.com/v1/api/jobs/{c}/search/1"
-               f"?app_id={app_id}&app_key={app_key}&results_per_page=50"
-               f"&max_days_old=30&what={query or 'engineer'}")
+        url = f"https://api.adzuna.com/v1/api/jobs/{c}/search/1"
+        params = {
+            "app_id": app_id,
+            "app_key": app_key,
+            "results_per_page": 50,
+            "max_days_old": 30,
+            "what": query or "engineer",
+        }
         try:
-            r = await client.get(url)
+            # httpx encodes `params` itself, so a role containing `&`, `#`, or
+            # other URL-special characters can't corrupt the query string (or
+            # smuggle the app key out of a hand-formatted URL) the way raw
+            # f-string interpolation could.
+            r = await client.get(url, params=params)
             r.raise_for_status()
             jobs.extend(parse_adzuna(r.json(), c))
         except Exception:
@@ -146,6 +155,12 @@ async def _fetch_one(client: httpx.AsyncClient, name: str, query: str) -> list[J
 async def fetch_all(query: str = "", providers=None, fresher_only: bool = True) -> list[Job]:
     from app.sources.experience import experience_filter
     names = [n for n in (providers or list(_ENDPOINTS.keys())) if n in _ENDPOINTS]
+    # Adzuna isn't in _ENDPOINTS (it's fetched separately via fetch_adzuna),
+    # so it used to run unconditionally regardless of the `providers` filter.
+    # Respect the same opt-out contract as every other provider: include it
+    # only when the caller didn't restrict `providers`, or explicitly asked
+    # for it.
+    include_adzuna = providers is None or "adzuna" in providers
     jobs: list[Job] = []
     async with httpx.AsyncClient(timeout=30, headers={"User-Agent": "LaunchPad/1.0"}) as client:
         # Run every provider fetch (plus Adzuna) concurrently instead of
@@ -153,7 +168,8 @@ async def fetch_all(query: str = "", providers=None, fresher_only: bool = True) 
         # whole /scan aggregator leg. return_exceptions=True keeps each
         # provider's failure non-fatal to the others (spec §6).
         tasks = [_fetch_one(client, name, query) for name in names]
-        tasks.append(fetch_adzuna(client, query))
+        if include_adzuna:
+            tasks.append(fetch_adzuna(client, query))
         results = await asyncio.gather(*tasks, return_exceptions=True)
     for result in results:
         if isinstance(result, BaseException):
