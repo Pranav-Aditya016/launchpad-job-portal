@@ -63,6 +63,7 @@ class ScanRequest(BaseModel):
     crawl_urls: list[CrawlUrl] = []
     aggregators: list[str] | None = None
     fresher_only: bool = True
+    crawl_curated: bool = False
 
 
 @app.post("/scan")
@@ -74,6 +75,25 @@ async def scan(req: ScanRequest = ScanRequest()):
     jobs = careerops_scan.run_scan(profile, req.ats, req.since_days)
     for cu in req.crawl_urls:
         jobs.extend(await crawl_adapter.fetch_jobs(cu.url, cu.company))
+
+    if req.crawl_curated:
+        # Best-effort bonus sources (h1bvisajobs/trueup/absolute-internship) —
+        # see the HONESTY comment on aggregators.CURATED_CRAWL_SOURCES: no
+        # public API, JS-heavy, markdown-link extraction may be noisy. Each
+        # site is independently non-fatal so one failing site never breaks
+        # the rest of the scan. Default is False, so this never runs unless
+        # the caller explicitly opts in.
+        for src in aggregators.CURATED_CRAWL_SOURCES:
+            try:
+                curated_jobs = await crawl_adapter.fetch_jobs(src["url"], src["company"])
+            except Exception:
+                continue
+            if src["company"] in aggregators.SPONSOR_FRIENDLY_SOURCES:
+                # Tag so downstream visa.needs_sponsorship_ok recognizes
+                # these as sponsor-friendly (source is otherwise "crawl4ai").
+                for j in curated_jobs:
+                    j.source = src["company"]
+            jobs.extend(curated_jobs)
 
     if req.fresher_only:
         jobs = experience.experience_filter(jobs)

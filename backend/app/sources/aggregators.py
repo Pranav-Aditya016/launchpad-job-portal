@@ -104,6 +104,27 @@ async def fetch_adzuna(client: httpx.AsyncClient, query: str = "", countries=Non
             continue  # per-source (per-country) non-fatal (spec §6)
     return jobs
 
+# --- Curated niche crawl targets (used via crawl_adapter.fetch_jobs, opt-in
+# through /scan's crawl_curated flag) --------------------------------------
+#
+# HONESTY: h1bvisajobs, TrueUp and Absolute Internship have no public API and
+# are JS-heavy sites. crawl4ai's markdown-link extraction (crawl_adapter.py)
+# is best-effort — it grabs every markdown link on the rendered page, so it
+# can capture navigation/footer noise alongside real listings and may need
+# per-site CSS selectors later for cleaner results. These three SUPPLEMENT —
+# they do not replace — the reliable API providers above (career-ops ATS scan
+# + Adzuna + the five remote aggregators). Absolute Internship in particular
+# is a paid placement PROGRAM (the applicant pays a placement fee), not a
+# standard job board, so real job yield from its listing page is expected to
+# be low; it's included only because it's a named source in the brief.
+CURATED_CRAWL_SOURCES = [
+    {"company": "h1bvisajobs", "url": "https://www.h1bvisajobs.com/jobs",
+     "sponsor_friendly": True},   # US roles from H1B-sponsoring employers
+    {"company": "trueup",       "url": "https://www.trueup.io/jobs"},
+    {"company": "absolute-internship", "url": "https://absoluteinternship.com/internships/"},
+]
+SPONSOR_FRIENDLY_SOURCES = {"h1bvisajobs"}
+
 async def fetch_all(query: str = "", providers=None, fresher_only: bool = True) -> list[Job]:
     from app.sources.experience import experience_filter
     names = providers or list(_ENDPOINTS.keys())
