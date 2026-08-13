@@ -68,8 +68,10 @@ export interface EvaluateResponse {
 }
 
 export interface TailorResponse {
-  pdf_url: string;
+  pdf_url: string | null;
   cover_letter: string;
+  cv_markdown: string;
+  pdf_available: boolean;
 }
 
 export interface ApplyResponse {

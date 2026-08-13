@@ -75,9 +75,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setTailorResult(res);
     } catch (e) {
       setTailorError(
-        e instanceof ApiError
-          ? e.message
-          : "Couldn't generate a PDF. Use Print / Save as PDF below instead."
+        e instanceof ApiError ? e.message : "Couldn't tailor this CV. Please try again."
       );
     } finally {
       setTailoring(false);
@@ -260,7 +258,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 {tailorError && (
                   <p className="text-caption text-danger">{tailorError}</p>
                 )}
-                {tailorResult && (
+                {tailorResult?.pdf_available && (
                   <div className="flex flex-col gap-2">
                     <a
                       href={outputPdfUrl(id)}
@@ -271,6 +269,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       Open tailored CV (PDF) ↗
                     </a>
                   </div>
+                )}
+                {tailorResult && !tailorResult.pdf_available && (
+                  <p className="text-caption text-muted">
+                    Your tailored CV is ready, but server-side PDF rendering isn&apos;t available on
+                    this machine. Use &ldquo;Print / Save as PDF&rdquo; below to save it — installing
+                    the GTK runtime enables server-side PDFs too.
+                  </p>
                 )}
                 {profile && (
                   <Button variant="ghost" size="sm" onClick={() => window.print()}>
@@ -292,7 +297,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </section>
             )}
 
-            {tailorResult && (
+            {tailorResult?.pdf_available && (
               <section className="flex flex-col gap-3 rounded-2xl border border-[color:var(--border)] bg-surface p-2 shadow-[var(--shadow-card)]">
                 <iframe
                   src={outputPdfUrl(id)}
@@ -305,7 +310,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
       </main>
 
-      {profile && <PrintCV profile={profile} job={job} coverLetter={tailorResult?.cover_letter} />}
+      {profile && (
+        <PrintCV
+          profile={profile}
+          job={job}
+          coverLetter={tailorResult?.cover_letter}
+          cvMarkdown={tailorResult?.cv_markdown}
+        />
+      )}
     </div>
   );
 }
