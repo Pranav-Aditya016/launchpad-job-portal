@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app import config, store
 from app.evaluate import evaluator
 from app.ingest import resume
-from app.sources import careerops_scan, crawl_adapter
+from app.sources import aggregators, careerops_scan, crawl_adapter, experience
 from app.tailor import writer
 
 try:
@@ -61,6 +61,8 @@ class ScanRequest(BaseModel):
     ats: list[str] | None = None
     since_days: int = 7
     crawl_urls: list[CrawlUrl] = []
+    aggregators: list[str] | None = None
+    fresher_only: bool = True
 
 
 @app.post("/scan")
@@ -72,6 +74,22 @@ async def scan(req: ScanRequest = ScanRequest()):
     jobs = careerops_scan.run_scan(profile, req.ats, req.since_days)
     for cu in req.crawl_urls:
         jobs.extend(await crawl_adapter.fetch_jobs(cu.url, cu.company))
+
+    if req.fresher_only:
+        jobs = experience.experience_filter(jobs)
+
+    try:
+        agg_jobs = await aggregators.fetch_all(
+            query=" ".join(profile.target_roles),
+            providers=req.aggregators,
+            fresher_only=req.fresher_only,
+        )
+    except Exception:
+        # per-source failures are already swallowed inside fetch_all; this is a
+        # final belt-and-suspenders guard so the aggregator leg can never break
+        # an otherwise-successful career-ops/crawl scan (spec §6, non-fatal).
+        agg_jobs = []
+    jobs.extend(agg_jobs)
 
     added = store.upsert_jobs(jobs)
     return {"added": added, "total": len(store.load_jobs())}
