@@ -170,12 +170,31 @@ def tailor(job_id: str):
     if evaluation is None:
         raise HTTPException(400, "Job has not been evaluated yet.")
 
-    if pdf is None:
-        raise HTTPException(500, "PDF rendering is unavailable in this environment.")
-
+    # The LLM tailoring is the core of this endpoint and only needs an LLM
+    # call, not a PDF renderer — always produce it. PDF rendering is a
+    # best-effort extra: attempt it only when the renderer imported
+    # successfully, and never let a renderer failure (missing native GTK
+    # libs, etc.) take down the whole request. See the `pdf` import guard
+    # at the top of this module.
     doc = writer.tailor(profile, job, evaluation)
-    pdf.render_cv_pdf(doc, config.OUTPUT_DIR / f"{job_id}.pdf")
-    return {"pdf_url": f"/output/{job_id}.pdf", "cover_letter": doc.cover_letter}
+
+    pdf_url = None
+    pdf_available = False
+    if pdf is not None:
+        try:
+            pdf.render_cv_pdf(doc, config.OUTPUT_DIR / f"{job_id}.pdf")
+        except Exception:
+            pass
+        else:
+            pdf_url = f"/output/{job_id}.pdf"
+            pdf_available = True
+
+    return {
+        "pdf_url": pdf_url,
+        "cover_letter": doc.cover_letter,
+        "cv_markdown": doc.cv_markdown,
+        "pdf_available": pdf_available,
+    }
 
 
 @app.post("/apply/{job_id}")
