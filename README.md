@@ -155,8 +155,11 @@ Then open **http://localhost:3000**.
 | Adzuna | Official API, opt-in (`ADZUNA_APP_ID`/`ADZUNA_APP_KEY`) | India, Germany, UK, US onshore listings | High when configured; silently skipped otherwise |
 | h1bvisajobs, TrueUp, Absolute Internship | `crawl4ai` markdown-link crawl, opt-in (`crawl_curated`) | Niche/visa-sponsor-friendly and internship listings | **Best-effort.** No public API, JS-heavy pages — extraction can pull navigation/footer noise alongside real listings. Absolute Internship is a paid placement program, not a standard board, so yield from it is expected to be low. These supplement, never replace, the sources above. |
 
-Every per-source failure across all of these is caught and skipped rather than failing the
-whole scan — a `/scan` call always returns whatever succeeded.
+Every per-source failure across all of these (career-ops, ad-hoc `crawl_urls`, curated
+crawl, and each aggregator) is caught rather than failing the whole scan — a `/scan` call
+always returns whatever succeeded, and reports what didn't in the response's `warnings`
+list (e.g. `["careerops: RuntimeError: node not found"]`) so a failure is visible, not
+silently swallowed.
 
 ## API reference
 
@@ -167,7 +170,7 @@ All endpoints live in `backend/app/api.py`.
 | `GET /health` | Liveness check. |
 | `POST /resume` | Upload a resume file (multipart `file`); parses and saves it as the profile. |
 | `GET /profile` | Return the saved profile, or `null` if none uploaded. |
-| `POST /scan` | Run discovery across all sources. Body: `ats: string[]?` (default `["greenhouse","lever","ashby","workday"]`), `since_days: int` (default `7`), `crawl_urls: {url, company}[]` (extra ad-hoc crawl targets), `aggregators: string[]?` (default all five), `fresher_only: bool` (default `true`), `crawl_curated: bool` (default `false`). Returns `{added, total}`. |
+| `POST /scan` | Run discovery across all sources. Body: `ats: string[]?` (default `["greenhouse","lever","ashby","workday"]`), `since_days: int` (default `7`), `crawl_urls: {url, company}[]` (extra ad-hoc crawl targets), `aggregators: string[]?` (default all five), `fresher_only: bool` (default `true`), `crawl_curated: bool` (default `false`). Returns `{added, total, warnings}` — `warnings` is a list of short per-source failure strings (e.g. career-ops, a `crawl_urls` entry, or the aggregator leg failing); an empty list means every source that ran succeeded. |
 | `GET /jobs` | List all stored jobs with their evaluation (if any), sorted by score descending. |
 | `POST /evaluate` | Score jobs against the profile. Body: `job_ids: string[]?` (omit/`null` to evaluate all unscored jobs). Returns `{evaluated}`. Requires `ANTHROPIC_API_KEY`. |
 | `POST /tailor/{job_id}` | Generate a tailored CV + cover letter for one evaluated job. Returns `{pdf_url, pdf_available, cover_letter, cv_markdown}`. Requires `ANTHROPIC_API_KEY`; `pdf_available` is `false` when WeasyPrint/GTK isn't installed. |

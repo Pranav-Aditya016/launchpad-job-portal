@@ -66,15 +66,37 @@ class ScanRequest(BaseModel):
     crawl_curated: bool = False
 
 
+def _short_error(prefix: str, e: Exception) -> str:
+    return f"{prefix}: {type(e).__name__}: {str(e)[:120]}"
+
+
 @app.post("/scan")
 async def scan(req: ScanRequest = ScanRequest()):
     profile = store.load_profile()
     if profile is None:
         raise HTTPException(400, "No profile found. Upload a resume first.")
 
-    jobs = careerops_scan.run_scan(profile, req.ats, req.since_days)
+    jobs: list = []
+    warnings: list[str] = []
+
+    # career-ops reverse-ATS leg: runs a subprocess (Node) that can fail for
+    # reasons outside our control (engine not vendored, Node missing, a
+    # timeout, etc). Per spec §6 ("Source failures are per-source and
+    # non-fatal") this must never take down the whole /scan request — catch
+    # it, record a short warning, and keep going with whatever other sources
+    # succeed.
+    try:
+        jobs.extend(careerops_scan.run_scan(profile, req.ats, req.since_days))
+    except Exception as e:
+        warnings.append(_short_error("careerops", e))
+
+    # Ad-hoc crawl_urls the caller passed in: each is independently
+    # non-fatal, same reasoning as the curated-source loop below.
     for cu in req.crawl_urls:
-        jobs.extend(await crawl_adapter.fetch_jobs(cu.url, cu.company))
+        try:
+            jobs.extend(await crawl_adapter.fetch_jobs(cu.url, cu.company))
+        except Exception as e:
+            warnings.append(_short_error(f"crawl:{cu.url}", e))
 
     if req.crawl_curated:
         # Best-effort bonus sources (h1bvisajobs/trueup/absolute-internship) —
@@ -86,7 +108,8 @@ async def scan(req: ScanRequest = ScanRequest()):
         for src in aggregators.CURATED_CRAWL_SOURCES:
             try:
                 curated_jobs = await crawl_adapter.fetch_jobs(src["url"], src["company"])
-            except Exception:
+            except Exception as e:
+                warnings.append(_short_error(f"crawl:{src['company']}", e))
                 continue
             if src["company"] in aggregators.SPONSOR_FRIENDLY_SOURCES:
                 # Tag so downstream visa.needs_sponsorship_ok recognizes
@@ -104,15 +127,16 @@ async def scan(req: ScanRequest = ScanRequest()):
             providers=req.aggregators,
             fresher_only=req.fresher_only,
         )
-    except Exception:
+    except Exception as e:
         # per-source failures are already swallowed inside fetch_all; this is a
         # final belt-and-suspenders guard so the aggregator leg can never break
         # an otherwise-successful career-ops/crawl scan (spec §6, non-fatal).
         agg_jobs = []
+        warnings.append(_short_error("aggregators", e))
     jobs.extend(agg_jobs)
 
     added = store.upsert_jobs(jobs)
-    return {"added": added, "total": len(store.load_jobs())}
+    return {"added": added, "total": len(store.load_jobs()), "warnings": warnings}
 
 
 @app.get("/jobs")

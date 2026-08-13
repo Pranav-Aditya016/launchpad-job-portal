@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [crawlCurated, setCrawlCurated] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [scanWarnings, setScanWarnings] = useState<string[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -78,12 +79,14 @@ export default function DashboardPage() {
 
   async function handleScan() {
     setErrorMessage(null);
+    setScanWarnings([]);
     setScanning(true);
     setStatusMessage("Scanning your sources — this can take a minute or two…");
     startTimer();
     try {
       const res = await scan({ since_days: sinceDays, fresher_only: fresherOnly, crawl_curated: crawlCurated });
       setStatusMessage(`Added ${res.added} new job${res.added === 1 ? "" : "s"} — ${res.total} total.`);
+      setScanWarnings(res.warnings ?? []);
       await loadJobs();
     } catch (e) {
       setErrorMessage(e instanceof ApiError ? e.message : "The scan failed. Try again.");
@@ -200,6 +203,21 @@ export default function DashboardPage() {
         {errorMessage && (
           <div className="rounded-xl bg-[color:var(--danger-wash)] px-4 py-3 text-body text-danger">
             {errorMessage}
+          </div>
+        )}
+
+        {/* Calm, non-alarming: the scan still succeeded overall — these are
+            just the sources that didn't respond this time. */}
+        {scanWarnings.length > 0 && (
+          <div className="rounded-xl bg-surface-2 px-4 py-3 text-body text-muted">
+            <p className="font-medium text-foreground/80">
+              Some sources didn&apos;t respond, the rest scanned fine:
+            </p>
+            <ul className="mt-1 flex flex-col gap-0.5 text-caption">
+              {scanWarnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
           </div>
         )}
 

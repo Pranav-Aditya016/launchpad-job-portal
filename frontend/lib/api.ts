@@ -57,6 +57,7 @@ export interface ScanRequest {
 export interface ScanResponse {
   added: number;
   total: number;
+  warnings?: string[];
 }
 
 export interface EvaluateRequest {
