@@ -1,10 +1,20 @@
+import asyncio
+import html
 import os
 import re
 import httpx
 from app.models import Job, job_id
 
 _TAG = re.compile(r"<[^>]+>")
-def _clean(s): return _TAG.sub(" ", s or "").strip()
+_WS = re.compile(r"\s+")
+def _clean(s):
+    # Real providers (e.g. Arbeitnow) return entity-encoded HTML like
+    # "&lt;p&gt;Hello&lt;/p&gt;". Unescape entities FIRST so the tag regex
+    # actually sees "<p>...</p>" and strips it, instead of leaving the
+    # "&lt;p&gt;" soup behind for the evaluator/tailor to choke on.
+    text = html.unescape(s or "")
+    text = _TAG.sub(" ", text)
+    return _WS.sub(" ", text).strip()
 
 def parse_remotive(data: dict) -> list[Job]:
     out = []
@@ -125,22 +135,28 @@ CURATED_CRAWL_SOURCES = [
 ]
 SPONSOR_FRIENDLY_SOURCES = {"h1bvisajobs"}
 
+async def _fetch_one(client: httpx.AsyncClient, name: str, query: str) -> list[Job]:
+    url, parser, _ = _ENDPOINTS[name]
+    if name == "remotive" and query:
+        url = f"{url}?search={query}"
+    r = await client.get(url)
+    r.raise_for_status()
+    return parser(r.json())
+
 async def fetch_all(query: str = "", providers=None, fresher_only: bool = True) -> list[Job]:
     from app.sources.experience import experience_filter
-    names = providers or list(_ENDPOINTS.keys())
+    names = [n for n in (providers or list(_ENDPOINTS.keys())) if n in _ENDPOINTS]
     jobs: list[Job] = []
     async with httpx.AsyncClient(timeout=30, headers={"User-Agent": "LaunchPad/1.0"}) as client:
-        for name in names:
-            if name not in _ENDPOINTS:
-                continue
-            url, parser, _ = _ENDPOINTS[name]
-            if name == "remotive" and query:
-                url = f"{url}?search={query}"
-            try:
-                r = await client.get(url)
-                r.raise_for_status()
-                jobs.extend(parser(r.json()))
-            except Exception:
-                continue  # per-source non-fatal (spec §6)
-        jobs.extend(await fetch_adzuna(client, query))
+        # Run every provider fetch (plus Adzuna) concurrently instead of
+        # sequentially, so one slow/hanging provider doesn't serialize the
+        # whole /scan aggregator leg. return_exceptions=True keeps each
+        # provider's failure non-fatal to the others (spec §6).
+        tasks = [_fetch_one(client, name, query) for name in names]
+        tasks.append(fetch_adzuna(client, query))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    for result in results:
+        if isinstance(result, BaseException):
+            continue  # per-source non-fatal (spec §6)
+        jobs.extend(result)
     return experience_filter(jobs) if fresher_only else jobs

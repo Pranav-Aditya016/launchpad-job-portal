@@ -26,6 +26,12 @@ def test_parse_themuse():
     jobs = a.parse_themuse(_load("agg_themuse.json"))
     assert jobs and all(j.source == "themuse" and j.url for j in jobs)
 
+def test_clean_decodes_html_entities():
+    # Real providers (e.g. Arbeitnow) return entity-encoded descriptions like
+    # "&lt;p&gt;...&lt;/p&gt;" — _clean must unescape THEN strip tags, not
+    # leave the entity soup untouched (Task 14 quality fix).
+    assert a._clean("&lt;p&gt;Hello&lt;/p&gt; &amp; more") == "Hello & more"
+
 def test_parse_adzuna():
     jobs = a.parse_adzuna(_load("agg_adzuna.json"), "in")
     assert jobs and all(j.source.startswith("adzuna-") and j.url and j.company for j in jobs)
