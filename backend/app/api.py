@@ -1,4 +1,5 @@
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app import config, store
+from app.models import Profile
 from app.evaluate import evaluator
 from app.ingest import resume
 from app.sources import aggregators, careerops_scan, crawl_adapter, experience, visa
@@ -59,6 +61,30 @@ def get_profile():
     return store.load_profile()
 
 
+@app.put("/profile")
+def put_profile(profile: Profile):
+    """Save a profile directly — no LLM, no API key required.
+
+    Two jobs: it persists edits the user makes on the review screen, and it is
+    the keyless way to get started. Resume parsing needs ANTHROPIC_API_KEY, but
+    job discovery does not, so a hand-filled profile is enough to scan and rank.
+    """
+    store.save_profile(profile)
+    return profile
+
+
+@app.get("/config")
+def get_config():
+    """What the backend can actually do right now, so the UI can guide the user."""
+    return {
+        "llm_available": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "pdf_available": pdf is not None,
+        "adzuna_available": bool(
+            os.environ.get("ADZUNA_APP_ID") and os.environ.get("ADZUNA_APP_KEY")
+        ),
+    }
+
+
 class CrawlUrl(BaseModel):
     url: str
     company: str
@@ -92,13 +118,19 @@ async def scan(req: ScanRequest = ScanRequest()):
     # non-fatal") this must never take down the whole /scan request — catch
     # it, record a short warning, and keep going with whatever other sources
     # succeed.
-    try:
-        # run_scan shells out via subprocess.run(..., timeout=1200) — sync and
-        # blocking. Run it in a worker thread so a multi-minute scan doesn't
-        # freeze the event loop (and every other request) for its duration.
-        jobs.extend(await asyncio.to_thread(careerops_scan.run_scan, profile, req.ats, req.since_days))
-    except Exception as e:
-        warnings.append(_short_error("careerops", e))
+    # An explicit empty `ats: []` means "skip the ATS sweep" — the fast path for
+    # an aggregator-only scan that returns in seconds. `None` (the default) means
+    # "use the default ATS set". Without this, [] would fall through run_scan's
+    # `ats or DEFAULT_ATS` and silently sweep every board — the slowest possible
+    # reading of a request that asked for none.
+    if req.ats is None or len(req.ats) > 0:
+        try:
+            # run_scan shells out via subprocess.run(..., timeout=1200) — sync and
+            # blocking. Run it in a worker thread so a multi-minute scan doesn't
+            # freeze the event loop (and every other request) for its duration.
+            jobs.extend(await asyncio.to_thread(careerops_scan.run_scan, profile, req.ats, req.since_days))
+        except Exception as e:
+            warnings.append(_short_error("careerops", e))
 
     # Ad-hoc crawl_urls the caller passed in: each is independently
     # non-fatal, same reasoning as the curated-source loop below.

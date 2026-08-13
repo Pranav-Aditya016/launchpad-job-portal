@@ -130,3 +130,39 @@ def test_jobs_includes_sponsorship_ok_and_applied(monkeypatch):
     assert by_id[india_job.id]["applied"] is True
     assert by_id[us_job.id]["sponsorship_ok"] is False
     assert by_id[us_job.id]["applied"] is False
+
+
+def test_put_profile_saves_without_llm(tmp_path, monkeypatch):
+    """A profile can be created with no ANTHROPIC_API_KEY — the keyless path."""
+    monkeypatch.setattr(api.store.cfg, "DATA_DIR", tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    c = TestClient(api.app)
+    body = {"name": "Test User", "location": "Bengaluru, India",
+            "target_roles": ["Software Engineer"], "skills": ["python"],
+            "resume_text": "some resume text"}
+    r = c.put("/profile", json=body)
+    assert r.status_code == 200
+    assert r.json()["name"] == "Test User"
+    assert api.store.load_profile().location == "Bengaluru, India"
+
+
+def test_config_reports_capabilities(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    body = TestClient(api.app).get("/config").json()
+    assert body["llm_available"] is False
+    assert set(body) == {"llm_available", "pdf_available", "adzuna_available"}
+
+
+def test_empty_ats_skips_the_slow_ats_sweep(tmp_path, monkeypatch):
+    """`ats: []` means skip the ATS leg entirely, not 'sweep every board'."""
+    monkeypatch.setattr(api.store.cfg, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(api.store, "load_profile", lambda: Profile(name="A"))
+
+    def _boom(*a, **k):
+        raise AssertionError("run_scan must not be called when ats == []")
+
+    monkeypatch.setattr(api.careerops_scan, "run_scan", _boom)
+    monkeypatch.setattr(api.aggregators, "fetch_all", _no_aggregators)
+    r = TestClient(api.app).post("/scan", json={"ats": [], "fresher_only": False})
+    assert r.status_code == 200
+    assert r.json()["added"] == 0
