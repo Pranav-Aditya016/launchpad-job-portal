@@ -1,0 +1,13 @@
+Ann Lee
+Email: a@x.com
+Location: Remote
+
+Summary:
+Machine learning engineer with 5 years of experience building production
+systems in Python and PyTorch.
+
+Skills: Python, PyTorch, SQL, Docker
+
+Experience:
+- Shipped X, a recommendation system that increased engagement by 20%.
+- Led migration of training pipeline to distributed infrastructure.

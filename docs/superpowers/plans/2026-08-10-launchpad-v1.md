@@ -813,10 +813,336 @@ def test_scan_and_apply(tmp_path, monkeypatch):
 
 ---
 
+## Task 14: Multi-aggregator job sources (fresher-friendly)
+
+> Added 2026-08-10 per expanded requirement: pull from many public/no-login job
+> boards and favour fresher / 0–2-year / intern / new-grad roles. Execute this task
+> AFTER Task 11 and BEFORE the frontend (Task 12) so the UI surfaces the richer results.
+
+**Files:**
+- Create: `backend/app/sources/experience.py`, `backend/app/sources/aggregators.py`
+- Test: `backend/tests/test_experience.py`, `backend/tests/test_aggregators.py`
+- Fixtures: `backend/tests/fixtures/agg_remotive.json`, `agg_arbeitnow.json`, `agg_remoteok.json`, `agg_jobicy.json`, `agg_themuse.json` (small trimmed real API responses, 2–3 records each)
+- Modify: `backend/app/api.py` (extend `/scan` with `aggregators` + `fresher_only`)
+
+**Interfaces:**
+- Consumes: `Job`, `job_id` (models); `httpx`.
+- Produces:
+  - `experience.is_entry_level(title:str, description:str="") -> bool`
+  - `experience.experience_filter(jobs:list[Job]) -> list[Job]`
+  - `aggregators.parse_remotive(data:dict)->list[Job]`, `parse_arbeitnow`, `parse_remoteok(data:list)`, `parse_jobicy`, `parse_themuse` (pure normalizers)
+  - `aggregators.PROVIDERS: dict[str, callable]` and `async aggregators.fetch_all(query:str="", providers:list[str]|None=None, fresher_only:bool=True) -> list[Job]`
+
+### Step 1: Experience filter (TDD)
+
+- [ ] **Write `backend/tests/test_experience.py`**
+
+```python
+from app.sources.experience import is_entry_level, experience_filter
+from app.models import Job
+
+def test_entry_level_positive():
+    assert is_entry_level("Junior Software Engineer")
+    assert is_entry_level("New Grad Data Analyst")
+    assert is_entry_level("Software Engineer Intern")
+    assert is_entry_level("Associate Developer", "0-2 years experience")
+
+def test_entry_level_negative():
+    assert not is_entry_level("Senior Software Engineer")
+    assert not is_entry_level("Staff Engineer")
+    assert not is_entry_level("Engineering Manager")
+    assert not is_entry_level("Principal Architect")
+
+def test_experience_filter_keeps_only_entry():
+    jobs = [Job(id="1", source="s", company="c", title="Senior Engineer", url="u1"),
+            Job(id="2", source="s", company="c", title="Junior Engineer", url="u2")]
+    kept = experience_filter(jobs)
+    assert [j.id for j in kept] == ["2"]
+```
+
+- [ ] **Run RED**, then implement `backend/app/sources/experience.py`:
+
+```python
+import re
+from app.models import Job
+
+_ENTRY = ("intern", "internship", "junior", "jr ", "jr.", "entry level",
+          "entry-level", "new grad", "new-grad", "graduate", "associate",
+          "trainee", "apprentice", "0-2 year", "0 to 2 year", "early career",
+          "fresher", "campus")
+_SENIOR = ("senior", "sr ", "sr.", "staff", "principal", "lead ", "manager",
+           "director", "head of", "architect", "vp ", "vice president",
+           "executive", "expert", "10+ year", "distinguished")
+
+def is_entry_level(title: str, description: str = "") -> bool:
+    t = (title or "").lower()
+    d = (description or "").lower()
+    if any(s in t for s in _SENIOR):
+        return False
+    if any(e in t for e in _ENTRY):
+        return True
+    # title neutral: accept if the description signals early-career and doesn't shout senior
+    if any(e in d for e in ("entry level", "entry-level", "new grad", "0-2 year",
+                            "0 to 2 year", "recent graduate", "fresher")):
+        return not any(s in d for s in ("senior", "principal", "staff", "5+ year", "7+ year"))
+    return False
+
+def experience_filter(jobs: list[Job]) -> list[Job]:
+    return [j for j in jobs if is_entry_level(j.title, j.description)]
+```
+
+- [ ] **Run GREEN.** Command: `cd backend && python -m pytest tests/test_experience.py -v`
+- [ ] **Commit:** `git commit -am "feat: entry-level (fresher) experience filter"`
+
+### Step 2: Aggregator normalizers (TDD, pure parsers against fixtures)
+
+First create the fixtures by capturing 2–3 real records from each API (trim to the
+fields used). Endpoints (all public, no key): Remotive
+`https://remotive.com/api/remote-jobs?search=<q>`; Arbeitnow
+`https://www.arbeitnow.com/api/job-board-api`; RemoteOK `https://remoteok.com/api`
+(first array element is legal metadata — skip it); Jobicy
+`https://jobicy.com/api/v2/remote-jobs?count=20`; The Muse
+`https://www.themuse.com/api/public/jobs?level=Entry%20Level&page=0`.
+
+- [ ] **Write `backend/tests/test_aggregators.py`** (pure parsers, no network):
+
+```python
+import json
+from pathlib import Path
+from app.sources import aggregators as a
+
+FX = Path(__file__).parent / "fixtures"
+
+def _load(name): return json.loads((FX / name).read_text(encoding="utf-8"))
+
+def test_parse_remotive():
+    jobs = a.parse_remotive(_load("agg_remotive.json"))
+    assert jobs and all(j.source == "remotive" and j.url and j.title for j in jobs)
+
+def test_parse_arbeitnow():
+    jobs = a.parse_arbeitnow(_load("agg_arbeitnow.json"))
+    assert jobs and all(j.source == "arbeitnow" and j.url for j in jobs)
+
+def test_parse_remoteok_skips_legal():
+    jobs = a.parse_remoteok(_load("agg_remoteok.json"))
+    assert jobs and all(j.source == "remoteok" and j.title for j in jobs)
+
+def test_parse_jobicy():
+    jobs = a.parse_jobicy(_load("agg_jobicy.json"))
+    assert jobs and all(j.source == "jobicy" and j.url for j in jobs)
+
+def test_parse_themuse():
+    jobs = a.parse_themuse(_load("agg_themuse.json"))
+    assert jobs and all(j.source == "themuse" and j.url for j in jobs)
+```
+
+- [ ] **Run RED**, then implement `backend/app/sources/aggregators.py`:
+
+```python
+import re
+import httpx
+from app.models import Job, job_id
+
+_TAG = re.compile(r"<[^>]+>")
+def _clean(s): return _TAG.sub(" ", s or "").strip()
+
+def parse_remotive(data: dict) -> list[Job]:
+    out = []
+    for j in data.get("jobs", []):
+        url = j.get("url", "")
+        out.append(Job(id=job_id("remotive", j.get("company_name",""), url),
+            source="remotive", company=j.get("company_name",""), title=j.get("title",""),
+            location=j.get("candidate_required_location",""), url=url,
+            description=_clean(j.get("description","")), posted=j.get("publication_date")))
+    return out
+
+def parse_arbeitnow(data: dict) -> list[Job]:
+    out = []
+    for j in data.get("data", []):
+        url = j.get("url", "")
+        out.append(Job(id=job_id("arbeitnow", j.get("company_name",""), url),
+            source="arbeitnow", company=j.get("company_name",""), title=j.get("title",""),
+            location=j.get("location",""), url=url,
+            description=_clean(j.get("description","")), posted=str(j.get("created_at",""))))
+    return out
+
+def parse_remoteok(data: list) -> list[Job]:
+    out = []
+    for j in data:
+        # first element is legal metadata (has no "position"/"id" job fields)
+        if not isinstance(j, dict) or not j.get("position"):
+            continue
+        url = j.get("url", "")
+        out.append(Job(id=job_id("remoteok", j.get("company",""), url),
+            source="remoteok", company=j.get("company",""), title=j.get("position",""),
+            location=j.get("location",""), url=url,
+            description=_clean(j.get("description","")), posted=j.get("date")))
+    return out
+
+def parse_jobicy(data: dict) -> list[Job]:
+    out = []
+    for j in data.get("jobs", []):
+        url = j.get("url", "")
+        out.append(Job(id=job_id("jobicy", j.get("companyName",""), url),
+            source="jobicy", company=j.get("companyName",""), title=j.get("jobTitle",""),
+            location=j.get("jobGeo",""), url=url,
+            description=_clean(j.get("jobExcerpt","") or j.get("jobDescription","")),
+            posted=j.get("pubDate")))
+    return out
+
+def parse_themuse(data: dict) -> list[Job]:
+    out = []
+    for j in data.get("results", []):
+        url = (j.get("refs") or {}).get("landing_page", "")
+        company = (j.get("company") or {}).get("name", "")
+        locs = ", ".join(l.get("name","") for l in j.get("locations", []))
+        out.append(Job(id=job_id("themuse", company, url), source="themuse",
+            company=company, title=j.get("name",""), location=locs, url=url,
+            description=_clean(j.get("contents","")), posted=j.get("publication_date")))
+    return out
+
+_ENDPOINTS = {
+    "remotive":  ("https://remotive.com/api/remote-jobs", parse_remotive, "dict"),
+    "arbeitnow": ("https://www.arbeitnow.com/api/job-board-api", parse_arbeitnow, "dict"),
+    "remoteok":  ("https://remoteok.com/api", parse_remoteok, "list"),
+    "jobicy":    ("https://jobicy.com/api/v2/remote-jobs?count=50", parse_jobicy, "dict"),
+    "themuse":   ("https://www.themuse.com/api/public/jobs?level=Entry%20Level&page=0", parse_themuse, "dict"),
+}
+PROVIDERS = {k: v[1] for k, v in _ENDPOINTS.items()}
+
+async def fetch_all(query: str = "", providers=None, fresher_only: bool = True) -> list[Job]:
+    from app.sources.experience import experience_filter
+    names = providers or list(_ENDPOINTS.keys())
+    jobs: list[Job] = []
+    async with httpx.AsyncClient(timeout=30, headers={"User-Agent": "LaunchPad/1.0"}) as client:
+        for name in names:
+            url, parser, _ = _ENDPOINTS[name]
+            if name == "remotive" and query:
+                url = f"{url}?search={query}"
+            try:
+                r = await client.get(url)
+                r.raise_for_status()
+                jobs.extend(parser(r.json()))
+            except Exception:
+                continue  # per-source non-fatal (spec §6)
+    return experience_filter(jobs) if fresher_only else jobs
+```
+
+- [ ] **Run GREEN.** Command: `cd backend && python -m pytest tests/test_aggregators.py -v`
+- [ ] **Commit:** `git commit -am "feat: multi-aggregator public job sources (remotive/arbeitnow/remoteok/jobicy/themuse)"`
+
+### Step 3: Wire into `/scan`
+
+- [ ] Extend the `/scan` request model with `aggregators: list[str] | None = None` and
+  `fresher_only: bool = True`. In the handler, after the career-ops + crawl legs, call
+  `await aggregators.fetch_all(query=" ".join(profile.target_roles), providers=req.aggregators, fresher_only=req.fresher_only)`
+  and extend the jobs list before `store.upsert_jobs`. Import `from app.sources import aggregators` at module level. Keep the existing `test_api_flow.py` green (its monkeypatched `run_scan` path is unaffected; `fetch_all` over an empty/default provider list must not be required for that test — guard so that when the aggregator call fails or is disabled the scan still returns).
+- [ ] Add one line to the `/scan` behavior: if `fresher_only` is true, ALSO apply
+  `experience.experience_filter` to the career-ops + crawl jobs so the whole listing is fresher-focused (imported at module level).
+- [ ] **Run** `cd backend && python -m pytest -v` — full suite green (pdf + integration skips allowed).
+- [ ] **Commit:** `git commit -am "feat: wire aggregators + fresher filter into /scan"`
+
+### Step 4: Opt-in live smoke (skipped by default)
+
+- [ ] Add `backend/tests/test_integration_aggregators.py` marked to skip unless
+  `RUN_INTEGRATION=1`; when enabled it calls `await aggregators.fetch_all(fresher_only=True)`
+  and asserts ≥1 entry-level Job with a real URL from at least one provider. Run it once
+  with `RUN_INTEGRATION=1` to confirm at least a couple of providers respond and the
+  fresher filter yields real junior roles; note results in the report. Providers that are
+  down that day are tolerated (per-source non-fatal). Commit.
+
+### Step 5: Country coverage (India + Germany) + visa/sponsorship — Adzuna provider
+
+> Requirement: the user is an Indian citizen — needs India-based roles, plus Germany and
+> other countries WHERE VISA SPONSORSHIP IS AVAILABLE. Adzuna is one free API key that
+> covers India (`in`), Germany (`de`), UK (`gb`), US (`us`) and more with real onshore
+> listings — the best single addition for country breadth. It is OPT-IN: skipped unless
+> the user sets `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` (free from developer.adzuna.com).
+
+- [ ] Add `parse_adzuna(data: dict, country: str) -> list[Job]` to `aggregators.py`:
+
+```python
+def parse_adzuna(data: dict, country: str) -> list[Job]:
+    out = []
+    for j in data.get("results", []):
+        url = j.get("redirect_url", "")
+        company = (j.get("company") or {}).get("display_name", "")
+        loc = (j.get("location") or {}).get("display_name", "")
+        out.append(Job(id=job_id("adzuna", company, url), source=f"adzuna-{country}",
+            company=company, title=j.get("title",""), location=loc, url=url,
+            description=_clean(j.get("description","")), posted=j.get("created")))
+    return out
+```
+
+- [ ] Add a country-aware Adzuna fetch and fold it into `fetch_all`. Default countries
+  include India and Germany:
+
+```python
+import os
+ADZUNA_COUNTRIES = ["in", "de", "gb", "us"]   # India + Germany first
+
+async def fetch_adzuna(client, query: str = "", countries=None) -> list[Job]:
+    app_id, app_key = os.environ.get("ADZUNA_APP_ID"), os.environ.get("ADZUNA_APP_KEY")
+    if not (app_id and app_key):
+        return []  # opt-in: no key, no call
+    jobs = []
+    for c in (countries or ADZUNA_COUNTRIES):
+        url = (f"https://api.adzuna.com/v1/api/jobs/{c}/search/1"
+               f"?app_id={app_id}&app_key={app_key}&results_per_page=50"
+               f"&max_days_old=30&what={query or 'engineer'}")
+        try:
+            r = await client.get(url); r.raise_for_status()
+            jobs.extend(parse_adzuna(r.json(), c))
+        except Exception:
+            continue
+    return jobs
+```
+
+  In `fetch_all`, after the no-key providers loop, also `jobs.extend(await fetch_adzuna(client, query, countries))`. Keep `fresher_only` filtering applied to the combined result. Add a `test_parse_adzuna` unit test against a trimmed `backend/tests/fixtures/agg_adzuna.json` fixture (assert `source` starts with `"adzuna-"`, real url/company).
+- [ ] **Commit:** `git commit -am "feat: Adzuna multi-country provider (India/Germany/visa countries, opt-in key)"`
+
+### Step 6: Visa-sponsorship signal + named niche sites (h1bvisajobs, TrueUp, Absolute Internship)
+
+- [ ] **Sponsorship awareness.** The evaluator already emits `no_sponsorship` (Task 7).
+  Add `experience.needs_sponsorship_ok(job, citizen_country="IN") -> bool` helper in a
+  small `sources/visa.py`: returns True if the job is in the citizen's country (India),
+  OR is remote, OR comes from a sponsor-friendly source (see below), OR its evaluation
+  doesn't set `no_sponsorship`. This is a SIGNAL for ranking/filtering, not a hard gate.
+  Unit-test it with a couple of Job cases (India job → True; US job flagged no_sponsorship
+  → False; source `h1bvisajobs` → True).
+- [ ] **Named niche sites as curated crawl sources.** Add to `aggregators.py` (or a new
+  `sources/curated.py`) a registry used via the existing `crawl_adapter.fetch_jobs`:
+
+```python
+# Best-effort public-page crawl targets. Brittle (JS-heavy, markup changes) —
+# per-source non-fatal; treated as a bonus on top of the reliable API providers.
+CURATED_CRAWL_SOURCES = [
+    {"company": "h1bvisajobs", "url": "https://www.h1bvisajobs.com/jobs",
+     "sponsor_friendly": True},   # US roles from H1B-sponsoring employers
+    {"company": "trueup",       "url": "https://www.trueup.io/jobs"},
+    {"company": "absolute-internship", "url": "https://absoluteinternship.com/internships/"},
+]
+SPONSOR_FRIENDLY_SOURCES = {"h1bvisajobs"}
+```
+
+  Wire a `crawl_curated: bool = False` option into `/scan`: when true, iterate
+  `CURATED_CRAWL_SOURCES` calling `crawl_adapter.fetch_jobs(url, company)`, tag jobs from
+  `SPONSOR_FRIENDLY_SOURCES`, extend the results (per-source failures ignored).
+- [ ] **Honesty caveat (put in the report and Task 13 docs):** these three sites have no
+  public API and are JS-heavy; markdown-link extraction is best-effort and may capture
+  noise or need per-site selectors later. They supplement — they do not replace — the
+  reliable API providers (career-ops ATS + Adzuna + remote aggregators). Absolute
+  Internship is a paid placement PROGRAM, not a standard job board, so yield may be low.
+- [ ] **Run** `cd backend && python -m pytest -v` — full suite green (skips allowed).
+- [ ] **Commit:** `git commit -am "feat: visa-sponsorship signal + curated niche crawl sources (h1bvisajobs/trueup/absolute-internship)"`
+
+---
+
 ## Self-Review
 
 **Spec coverage:**
 - §1 purpose → Tasks 3–12 deliver upload→scan→rank→tailor→assisted-apply. ✓
+- §4 source layer (b) multi-aggregator + fresher filter → Task 14. ✓
 - §2 boundaries → `/apply` never submits (Task 10 test asserts); public sources only (Tasks 5–6). ✓
 - §3 architecture → Next.js+FastAPI+career-ops subprocess+crawl4ai (Tasks 0,5,6,12). ✓
 - §4 six components → resume ingest (3), source layer (5,6), eval (7), tailoring (8,9), assisted-apply (10,12), Apple frontend (12). ✓

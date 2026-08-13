@@ -1,0 +1,26 @@
+{
+  "results": [
+    {
+      "id": "4756123890",
+      "title": "Graduate Software Engineer",
+      "company": {"display_name": "Infosys Limited"},
+      "location": {"display_name": "Bengaluru, Karnataka", "area": ["India", "Karnataka", "Bengaluru"]},
+      "redirect_url": "https://www.adzuna.in/land/ad/4756123890?se=abc123",
+      "description": "We are looking for a Graduate Software Engineer to join our team in Bengaluru. 0-2 years experience welcome. &lt;p&gt;Great benefits&lt;/p&gt;",
+      "created": "2026-08-01T09:12:00Z",
+      "category": {"label": "IT Jobs"}
+    },
+    {
+      "id": "4756123891",
+      "title": "Junior Data Analyst",
+      "company": {"display_name": "Deutsche Bank"},
+      "location": {"display_name": "Berlin, Germany", "area": ["Germany", "Berlin"]},
+      "redirect_url": "https://www.adzuna.de/land/ad/4756123891?se=def456",
+      "description": "Entry level Data Analyst role in Berlin. Visa sponsorship available for the right candidate.",
+      "created": "2026-08-02T11:30:00Z",
+      "category": {"label": "IT Jobs"}
+    }
+  ],
+  "count": 2,
+  "mean": 55000.0
+}
