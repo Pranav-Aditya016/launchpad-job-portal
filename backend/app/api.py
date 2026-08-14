@@ -27,6 +27,23 @@ except OSError:
     pdf = None
 
 app = FastAPI(title="LaunchPad")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    """Never let an exception escape as a bare 500.
+
+    FastAPI's default 500 is returned WITHOUT CORS headers, so a browser reports
+    it as a network failure and the UI says "Can't reach the backend" — pointing
+    the user at connectivity when the real fault is server-side. Returning JSON
+    through the normal response path keeps CORS applied and shows the real error.
+    """
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {str(exc)[:300]}"},
+    )
+
 # Both loopback spellings: a browser may load the UI as localhost:3000 or
 # 127.0.0.1:3000, and those are different Origins to CORS. Allowing only one
 # makes every fetch fail with an opaque "backend not connected" in the UI.
