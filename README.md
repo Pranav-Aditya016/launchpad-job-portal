@@ -81,6 +81,24 @@ Frontend — `frontend/.env.local` (already present in this repo):
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
+
+### LLM provider: subscription (free) or API key
+
+LaunchPad can reach Claude two ways. Pick with `LAUNCHPAD_LLM=cli|api` (default `auto`:
+API when a key is set, otherwise CLI).
+
+| Provider | Auth | Cost | Notes |
+|---|---|---|---|
+| **`cli`** (default without a key) | Your **Claude Pro/Max subscription**, via the Claude Code CLI (`claude -p`) | No API credits | Needs the `claude` CLI installed and logged in. Subject to your subscription's rate limits, and one job at a time — slower for large batches. |
+| **`api`** | `ANTHROPIC_API_KEY` | Billed API credits | Faster, parallel-friendly. A Pro subscription does **not** fund this — the API bills separately. |
+
+Check what's active at any time:
+
+```bash
+curl http://localhost:8000/config
+# {"llm_available":true,"llm_provider":"cli","pdf_available":false,"adzuna_available":false}
+```
+
 ## Windows + PDF generation
 
 The backend renders tailored-CV PDFs server-side with

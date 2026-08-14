@@ -147,10 +147,25 @@ def test_put_profile_saves_without_llm(tmp_path, monkeypatch):
 
 
 def test_config_reports_capabilities(monkeypatch):
+    """With no API key the app is still LLM-capable via the Claude Code CLI
+    (subscription auth), so /config must report the provider, not just a key."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
+    monkeypatch.setattr(api.llm, "claude_cli_path", lambda: "/usr/bin/claude")
+    body = TestClient(api.app).get("/config").json()
+    assert body["llm_provider"] == "cli"
+    assert body["llm_available"] is True
+    assert set(body) == {
+        "llm_available", "llm_provider", "pdf_available", "adzuna_available",
+    }
+
+
+def test_config_reports_llm_unavailable_with_no_key_and_no_cli(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
+    monkeypatch.setattr(api.llm, "claude_cli_path", lambda: None)
     body = TestClient(api.app).get("/config").json()
     assert body["llm_available"] is False
-    assert set(body) == {"llm_available", "pdf_available", "adzuna_available"}
 
 
 def test_empty_ats_skips_the_slow_ats_sweep(tmp_path, monkeypatch):

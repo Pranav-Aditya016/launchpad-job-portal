@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app import config, store
+from app import config, llm, store
 from app.models import Profile
 from app.evaluate import evaluator
 from app.ingest import resume
@@ -76,8 +76,13 @@ def put_profile(profile: Profile):
 @app.get("/config")
 def get_config():
     """What the backend can actually do right now, so the UI can guide the user."""
+    provider = llm.provider()
+    # 'cli' works off the Claude Code subscription login, so it needs no API key.
+    llm_available = bool(os.environ.get("ANTHROPIC_API_KEY")) if provider == "api" \
+        else llm.claude_cli_path() is not None
     return {
-        "llm_available": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "llm_available": llm_available,
+        "llm_provider": provider,
         "pdf_available": pdf is not None,
         "adzuna_available": bool(
             os.environ.get("ADZUNA_APP_ID") and os.environ.get("ADZUNA_APP_KEY")
