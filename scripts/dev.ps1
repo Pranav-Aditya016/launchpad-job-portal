@@ -41,7 +41,7 @@ if (-not (Test-Path (Join-Path $frontendDir 'node_modules'))) {
 Write-Host "Starting backend  -> http://localhost:8000" -ForegroundColor Cyan
 Start-Process pwsh -ArgumentList @(
     '-NoExit', '-Command',
-    "Set-Location `"$backendDir`"; python -m uvicorn app.api:app --reload --port 8000"
+    "Set-Location `"$backendDir`"; python -m uvicorn app.api:app --reload --host 0.0.0.0 --port 8000"
 )
 
 Write-Host "Starting frontend -> http://localhost:3000" -ForegroundColor Cyan

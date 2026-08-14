@@ -27,8 +27,14 @@ except OSError:
     pdf = None
 
 app = FastAPI(title="LaunchPad")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"],
-                   allow_methods=["*"], allow_headers=["*"])
+# Both loopback spellings: a browser may load the UI as localhost:3000 or
+# 127.0.0.1:3000, and those are different Origins to CORS. Allowing only one
+# makes every fetch fail with an opaque "backend not connected" in the UI.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["*"], allow_headers=["*"],
+)
 
 
 @app.get("/health")
