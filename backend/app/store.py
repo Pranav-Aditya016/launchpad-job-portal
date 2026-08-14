@@ -44,11 +44,22 @@ def _write_atomic(path: Path, text: str) -> None:
 
 
 def _read_text(path: Path) -> str | None:
-    """File contents, or None if missing/empty (treated as 'not written yet')."""
+    """File contents, or None if missing/empty (treated as 'not written yet').
+
+    Files written before this module specified an encoding were saved in the
+    Windows default (cp1252), so a UTF-8-only read raises UnicodeDecodeError on
+    an em-dash in a job description. Fall back rather than lose the data — new
+    writes are always UTF-8, so these files heal on the next save.
+    """
     if not path.exists():
         return None
-    text = path.read_text(encoding="utf-8").strip()
-    return text or None
+    for encoding in ("utf-8", "cp1252", "latin-1"):
+        try:
+            text = path.read_text(encoding=encoding).strip()
+            return text or None
+        except UnicodeDecodeError:
+            continue
+    return None
 
 
 def save_profile(p: Profile) -> None:
