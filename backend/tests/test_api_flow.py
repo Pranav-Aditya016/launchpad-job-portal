@@ -181,3 +181,25 @@ def test_empty_ats_skips_the_slow_ats_sweep(tmp_path, monkeypatch):
     r = TestClient(api.app).post("/scan", json={"ats": [], "fresher_only": False})
     assert r.status_code == 200
     assert r.json()["added"] == 0
+
+
+def test_resume_conversion_failure_is_a_clean_400_not_an_unhandled_500(tmp_path, monkeypatch):
+    """An unreadable file must yield a 400 with a useful detail.
+
+    An unhandled 500 is returned WITHOUT CORS headers, so the browser reports it
+    as a network failure and the UI shows "Can't reach the backend" — sending the
+    user to debug connectivity instead of their file.
+    """
+    monkeypatch.setattr(api.store.cfg, "DATA_DIR", tmp_path)
+
+    def _boom(_path):
+        raise ValueError("PdfConverter threw MissingDependencyException")
+
+    monkeypatch.setattr(api.resume, "ingest", _boom)
+    r = TestClient(api.app).post(
+        "/resume", files={"file": ("cv.pdf", b"%PDF-1.4 fake", "application/pdf")}
+    )
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "Couldn't read that resume file" in detail
+    assert "markitdown[all]" in detail

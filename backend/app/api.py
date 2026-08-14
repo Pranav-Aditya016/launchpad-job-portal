@@ -56,6 +56,19 @@ async def upload_resume(file: UploadFile = File(...)):
             profile = await asyncio.to_thread(resume.ingest, tmp_path)
         except RuntimeError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            # Anything else (an unreadable/corrupt file, a missing markitdown
+            # format extra, an OCR failure) must not escape as an unhandled
+            # 500: FastAPI returns those WITHOUT CORS headers, so the browser
+            # reports a network failure and the UI says "Can't reach the
+            # backend" — pointing the user at the wrong problem entirely.
+            detail = f"Couldn't read that resume file: {type(exc).__name__}: {str(exc)[:200]}"
+            if "MissingDependency" in str(exc) or "MissingDependency" in type(exc).__name__:
+                detail += (
+                    " — this format needs an extra: pip install 'markitdown[all]'."
+                    " You can also paste your resume text instead."
+                )
+            raise HTTPException(400, detail) from exc
         store.save_profile(profile)
     finally:
         tmp_path.unlink(missing_ok=True)
