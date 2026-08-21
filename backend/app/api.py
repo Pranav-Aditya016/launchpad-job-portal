@@ -113,12 +113,18 @@ def put_profile(profile: Profile):
 def get_config():
     """What the backend can actually do right now, so the UI can guide the user."""
     provider = llm.provider()
-    # 'cli' works off the Claude Code subscription login, so it needs no API key.
-    llm_available = bool(os.environ.get("ANTHROPIC_API_KEY")) if provider == "api" \
-        else llm.claude_cli_path() is not None
+    # Each provider proves availability differently: the API needs a key, the
+    # CLI needs the claude binary (subscription auth), ollama needs a server.
+    if provider == "api":
+        llm_available = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    elif provider == "cli":
+        llm_available = llm.claude_cli_path() is not None
+    else:
+        llm_available = llm.ollama_available()
     return {
         "llm_available": llm_available,
         "llm_provider": provider,
+        "llm_model": llm.OLLAMA_MODEL if provider == "ollama" else config.LLM_MODEL,
         "pdf_available": pdf is not None,
         "adzuna_available": bool(
             os.environ.get("ADZUNA_APP_ID") and os.environ.get("ADZUNA_APP_KEY")

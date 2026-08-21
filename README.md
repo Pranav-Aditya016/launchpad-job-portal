@@ -91,6 +91,15 @@ API when a key is set, otherwise CLI).
 |---|---|---|---|
 | **`cli`** (default without a key) | Your **Claude Pro/Max subscription**, via the Claude Code CLI (`claude -p`) | No API credits | Needs the `claude` CLI installed and logged in. Subject to your subscription's rate limits, and one job at a time — slower for large batches. |
 | **`api`** | `ANTHROPIC_API_KEY` | Billed API credits | Faster, parallel-friendly. A Pro subscription does **not** fund this — the API bills separately. |
+| **`ollama`** | none — a local model on your own GPU | Free, offline, unlimited | Needs Ollama running and a model pulled (`ollama pull qwen3:8b`). Default model `qwen3:8b` (~5.2GB, fits an 8GB card). Set `LAUNCHPAD_OLLAMA_MODEL` to change it, `OLLAMA_HOST` to point elsewhere. Output is constrained to valid JSON via Ollama's `format: json`. **Quality is materially below Claude** — expect looser scoring and occasional embellishment; good for bulk triage, worth re-checking your shortlist on `cli`. |
+
+Run fully local:
+
+```powershell
+$env:LAUNCHPAD_LLM = "ollama"
+cd backend; python -m uvicorn app.api:app --reload --host 0.0.0.0 --port 8000
+```
+
 
 Check what's active at any time:
 

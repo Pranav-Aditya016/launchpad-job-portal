@@ -156,16 +156,31 @@ def test_config_reports_capabilities(monkeypatch):
     assert body["llm_provider"] == "cli"
     assert body["llm_available"] is True
     assert set(body) == {
-        "llm_available", "llm_provider", "pdf_available", "adzuna_available",
+        "llm_available", "llm_provider", "llm_model",
+        "pdf_available", "adzuna_available",
     }
 
 
-def test_config_reports_llm_unavailable_with_no_key_and_no_cli(monkeypatch):
+def test_config_falls_back_to_local_ollama_with_no_key_and_no_cli(monkeypatch):
+    """No API key and no Claude CLI still leaves a working path: the local
+    model. /config must report it (and which model) rather than claiming the
+    app has no LLM at all."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
     monkeypatch.setattr(api.llm, "claude_cli_path", lambda: None)
+    monkeypatch.setattr(api.llm, "ollama_available", lambda: True)
     body = TestClient(api.app).get("/config").json()
-    assert body["llm_available"] is False
+    assert body["llm_provider"] == "ollama"
+    assert body["llm_available"] is True
+    assert body["llm_model"] == api.llm.OLLAMA_MODEL
+
+
+def test_config_reports_llm_unavailable_when_nothing_is_usable(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
+    monkeypatch.setattr(api.llm, "claude_cli_path", lambda: None)
+    monkeypatch.setattr(api.llm, "ollama_available", lambda: False)
+    assert TestClient(api.app).get("/config").json()["llm_available"] is False
 
 
 def test_empty_ats_skips_the_slow_ats_sweep(tmp_path, monkeypatch):
