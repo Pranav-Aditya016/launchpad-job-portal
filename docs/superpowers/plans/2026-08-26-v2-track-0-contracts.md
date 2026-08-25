@@ -1455,6 +1455,13 @@ Then **delete** the inline `@app.get("/config")` handler (currently
 `backend/app/api.py:112-131`) — it now lives in `routes/config.py`. Leave every other
 v1 route exactly where it is.
 
+**Do NOT remove `llm` from `api.py`'s imports** (controller Ruling R2). After the
+handler moves, `llm` may look unused there, but `tests/test_api_flow.py:149-183`
+patches `api.llm.claude_cli_path` and `api.llm.ollama_available` to exercise
+`/config`. Those patches reach the router because `from app import llm` in both
+modules binds the *same* module object — but only while `api.py` still exposes the
+name. Keep the import line `from app import config, llm, store` exactly as it is.
+
 - [ ] **Step 11: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_v2_routes.py -v`
@@ -1490,10 +1497,19 @@ git commit -m "feat: six v2 routers; api.py wired once and now frozen"
 translucent layer painted *under* the text. Never place body text directly on
 `--glass-bg` alone.
 
-- [ ] **Step 1: Replace the token blocks in `frontend/app/globals.css`**
+**ADDITIVE ONLY — do not delete any existing token (controller Ruling R1).**
+`frontend/app` and `frontend/components` reference the v1 tokens ~60 times
+(`--border` 19×, `--shadow-card` 10×, `--border-strong` 10×, `--accent-wash` 9×, plus
+`--surface`, `--surface-2`, `--surface-translucent`, `--shadow-elevated`). CSS custom
+properties fail **silently**: deleting them leaves `npm run build` green while every
+card loses its background and border. So keep every v1 token *name*, re-value it to
+the candy-glass palette, and add the new tokens alongside. The existing UI then picks
+up the new look immediately, and Track E migrates the legacy names later.
 
-Keep `@import "tailwindcss";` as line 1. Replace everything from `:root {` through the
-end of the `@media (prefers-color-scheme: dark)` block with:
+- [ ] **Step 1: Re-value the `:root` block in `frontend/app/globals.css`**
+
+Keep `@import "tailwindcss";` as line 1. Replace the body of the existing `:root { … }`
+block with the following — note every v1 name is still present:
 
 ```css
 :root {
@@ -1530,6 +1546,16 @@ end of the `@media (prefers-color-scheme: dark)` block with:
   --radius-card: 22px;
   --radius-pill: 999px;
   --spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+
+  /* v1 names, re-valued for glass. KEEP THESE — ~60 live references.
+     Deleting one fails silently and strips a component's surface. */
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-translucent: rgba(255, 255, 255, 0.55);
+  --surface-2: rgba(245, 240, 255, 0.72);
+  --border: rgba(124, 92, 255, 0.14);
+  --border-strong: rgba(124, 92, 255, 0.26);
+  --shadow-card: 0 4px 14px rgba(120, 90, 200, 0.10), 0 12px 34px -14px rgba(120, 90, 200, 0.22);
+  --shadow-elevated: 0 8px 32px rgba(120, 90, 200, 0.18), 0 30px 60px -20px rgba(120, 90, 200, 0.32);
 }
 ```
 
@@ -1556,6 +1582,13 @@ values in only one of them leaves one of those two paths on the light palette.
     --danger: #ff7aa8;
     --warning: #ffc457;
     --success: #4ddc9a;
+    --surface: rgba(38, 30, 66, 0.62);
+    --surface-translucent: rgba(38, 30, 66, 0.55);
+    --surface-2: rgba(50, 40, 84, 0.72);
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35), 0 12px 34px -14px rgba(0, 0, 0, 0.5);
+    --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45), 0 30px 60px -20px rgba(0, 0, 0, 0.65);
   }
 }
 
@@ -1573,6 +1606,13 @@ values in only one of them leaves one of those two paths on the light palette.
   --danger: #ff7aa8;
   --warning: #ffc457;
   --success: #4ddc9a;
+  --surface: rgba(38, 30, 66, 0.62);
+  --surface-translucent: rgba(38, 30, 66, 0.55);
+  --surface-2: rgba(50, 40, 84, 0.72);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35), 0 12px 34px -14px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45), 0 30px 60px -20px rgba(0, 0, 0, 0.65);
 }
 ```
 
@@ -1620,16 +1660,22 @@ Append:
 }
 ```
 
-- [ ] **Step 4: Verify the frontend still builds**
+- [ ] **Step 4: Prove no referenced token was dropped**
+
+A green build proves nothing here — CSS custom properties fail silently. Verify by
+set comparison instead: every token the components reference must still be defined.
 
 ```bash
-cd frontend && npm run build && npm run lint
+cd frontend
+grep -rhoE 'var\(--[a-z0-9-]+' --include=*.tsx --include=*.css app components \
+  | sed 's/var(//' | sort -u > /tmp/referenced.txt
+grep -oE '^\s*--[a-z0-9-]+' app/globals.css | tr -d ' ' | sort -u > /tmp/defined.txt
+comm -23 /tmp/referenced.txt /tmp/defined.txt
 ```
-Expected: build succeeds, lint clean. If any existing component referenced a removed
-v1 token (`--surface`, `--surface-2`, `--border-strong`, `--shadow-card`,
-`--shadow-elevated`), the build still succeeds (CSS vars fail silently) — so also run
-`grep -rn "var(--surface\|--shadow-card\|--shadow-elevated\|--border-strong" frontend/`
-and add back any token still referenced, mapped to its glass equivalent.
+Expected: **no output.** Any line printed is a token a component uses that the
+stylesheet no longer defines — add it back before continuing.
+
+Then: `npm run build && npm run lint` — build succeeds, lint clean.
 
 - [ ] **Step 5: Commit**
 
