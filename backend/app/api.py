@@ -1,5 +1,4 @@
 import asyncio
-import os
 import tempfile
 from pathlib import Path
 
@@ -24,16 +23,13 @@ from app.sources import aggregators, careerops_scan, crawl_adapter, experience, 
 from app.sources import registry
 from app.tailor import writer
 
-try:
-    # WeasyPrint imports its native GTK/Pango/Cairo stack at import time.
-    # On machines missing those native libs (e.g. this Windows dev box),
-    # `import weasyprint` raises OSError rather than ImportError. We still
-    # want the rest of the API (and its tests) to import and run fine, so
-    # `pdf` stays a module-level name for monkeypatching but degrades to
-    # None here — /tailor reports a clear 500 instead of crashing import.
-    from app.tailor import pdf
-except OSError:
-    pdf = None
+# `pdf` is either the weasyprint-backed module or None on a machine missing
+# WeasyPrint's native GTK/Pango/Cairo stack — guarded once in app/tailor/__init__.py
+# (a failed submodule import isn't cached in sys.modules, so re-guarding it here
+# would re-run WeasyPrint's failing import and print its stderr banner again).
+# `pdf` stays a module-level name here for monkeypatching; /tailor reports a
+# clear 500 instead of crashing import when it's None.
+from app.tailor import pdf
 
 app = FastAPI(title="LaunchPad")
 

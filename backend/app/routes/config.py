@@ -9,13 +9,13 @@ import os
 from fastapi import APIRouter
 
 from app import config, llm
+# `pdf` is either the weasyprint-backed module or None, guarded once in
+# app/tailor/__init__.py (a failed submodule import isn't cached in
+# sys.modules, so re-guarding it here would re-run WeasyPrint's failing
+# import and print its stderr banner a second time).
+from app.tailor import pdf
 
 router = APIRouter()
-
-try:
-    from app.tailor import pdf
-except OSError:      # WeasyPrint raises OSError, not ImportError, without GTK
-    pdf = None
 
 
 @router.get("/config")
