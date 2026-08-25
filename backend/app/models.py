@@ -10,6 +10,7 @@ widen JSON scalars into the declared shape.
 """
 
 import hashlib
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -74,6 +75,8 @@ class Job(BaseModel):
     url: str
     description: str = ""
     posted: str | None = None
+    region: str = ""              # "in" | "de" | "global" — from the source's meta
+    first_seen: str | None = None # ISO-8601, set on first upsert
 
     @field_validator("company", "title", "location", "description", mode="before")
     @classmethod
@@ -120,3 +123,75 @@ class TailoredDoc(BaseModel):
     @classmethod
     def _coerce_str(cls, v):
         return _to_str(v)
+
+
+ConnectionStatus = Literal["disconnected", "connected", "expired", "checking", "blocked"]
+QueueState = Literal["ready", "prepared", "submitted", "skipped"]
+
+
+class Connection(BaseModel):
+    """Status of ONE login-gated portal.
+
+    Deliberately holds no credential of any kind. LaunchPad never sees the user's
+    password: they log in themselves in a real browser window and we persist only
+    the resulting browser profile on local disk (spec §6.3). If you are ever
+    tempted to add a `password` field here, re-read spec §2.
+    """
+
+    portal: str
+    status: ConnectionStatus = "disconnected"
+    last_verified: str | None = None   # ISO-8601
+    note: str = ""                     # human-readable last error, shown in the UI
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def _coerce_str(cls, v):
+        return _to_str(v)
+
+
+class ScanRun(BaseModel):
+    """One scan cycle, manual or scheduled."""
+
+    id: str
+    started: str
+    finished: str | None = None
+    trigger: Literal["manual", "scheduled"] = "manual"
+    per_source: dict[str, int] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    evaluated: int = 0
+    tailored: int = 0
+    partial: bool = False   # True when the 20-minute cycle cap cut the run short
+
+    @field_validator("warnings", mode="before")
+    @classmethod
+    def _coerce_list(cls, v):
+        return _to_str_list(v)
+
+
+class QueueItem(BaseModel):
+    """A prepared application awaiting the user's own submit click.
+
+    `submitted` means the USER told us they submitted it. Nothing in this system
+    presses a submit button (spec §2, §6.5).
+    """
+
+    job_id: str
+    state: QueueState = "ready"
+    score: float = 0.0
+    prepared_at: str | None = None
+    submitted_at: str | None = None
+    cv_pdf: str | None = None   # path relative to launchpad_data/output
+    notes: str = ""
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def _coerce_str(cls, v):
+        return _to_str(v)
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def _coerce_score(cls, v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
