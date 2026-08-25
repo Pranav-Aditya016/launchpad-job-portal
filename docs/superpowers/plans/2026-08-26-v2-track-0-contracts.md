@@ -323,6 +323,11 @@ Then add the two fields to the existing `Job` class, immediately after `posted`:
     first_seen: str | None = None # ISO-8601, set on first upsert
 ```
 
+Then add `"region"` to `Job`'s existing `_coerce_str` validator field list, so it reads
+`@field_validator("company", "title", "location", "description", "region", mode="before")`.
+`region` is populated from adapter metadata in tracks B and C — the same loosely-typed
+external input every other text field on this model coerces rather than rejects.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/test_v2_models.py -v`
