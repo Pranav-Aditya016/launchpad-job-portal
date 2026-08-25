@@ -49,6 +49,18 @@ def test_v1_data_still_loads():
     assert Job(**v1).region == ""
 
 
+def test_job_region_coerces_like_other_text_fields():
+    """region is a str field populated from external metadata; must coerce None and non-strings."""
+    j1 = Job(id="i", source="s", company="c", title="t", url="u", region=None)
+    assert j1.region == ""
+
+    j2 = Job(id="i", source="s", company="c", title="t", url="u", region=42)
+    assert j2.region == "42"
+
+    j3 = Job(id="i", source="s", company="c", title="t", url="u", region=["in", "de"])
+    assert j3.region == "in de"
+
+
 def test_profile_is_unchanged():
     p = Profile(name="A", skills="python")   # v1 coercion still applies
     assert p.skills == ["python"]

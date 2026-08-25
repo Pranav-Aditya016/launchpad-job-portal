@@ -78,7 +78,7 @@ class Job(BaseModel):
     region: str = ""              # "in" | "de" | "global" — from the source's meta
     first_seen: str | None = None # ISO-8601, set on first upsert
 
-    @field_validator("company", "title", "location", "description", mode="before")
+    @field_validator("company", "title", "location", "description", "region", mode="before")
     @classmethod
     def _coerce_str(cls, v):
         return _to_str(v)
