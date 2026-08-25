@@ -443,3 +443,78 @@ local model. Email/WhatsApp notifications (a v3 candidate once the queue is prov
    updates.
 6. `npm run build` and `npm run lint` clean; the full pytest suite green.
 7. `test_no_autosubmit.py` passes.
+8. A 6-hour unattended run stays inside every §12 budget: no VRAM OOM, no cycle
+   overlap, no unbounded disk growth.
+
+---
+
+## 12. Hardware safety
+
+This product runs inference on a **laptop** GPU on a schedule, potentially for weeks.
+That is a different risk profile from a one-off script, and it is designed for
+explicitly. Nothing here is optional or best-effort.
+
+**Nothing in this project ever touches hardware settings.** No clock, power-limit, fan
+curve, voltage or driver modification, and no tool that performs one is installed.
+Every safeguard below works by *asking for less*, never by tuning the machine.
+
+### 12.1 VRAM — hard ceilings
+
+The 4060 Laptop has 8 GB. Exceeding it does not crash cleanly; it thrashes into system
+RAM and turns a 20-second call into a multi-minute one while pinning the GPU.
+
+- **One LLM call at a time.** A process-wide `asyncio.Semaphore(1)` wraps every
+  `complete_json`. Concurrent local inference on 8 GB is the fastest route to OOM, and
+  batching buys nothing when a single call already saturates the card.
+- **Model size guard.** Preflight refuses to select any model whose file exceeds
+  **6.5 GB**, with a clear message naming the offender. `gemma4:e4b` (9.6 GB) is
+  already on this machine and is explicitly rejected rather than silently thrashed.
+  `qwen3:8b` (5.2 GB) plus 8k context fits with headroom.
+- **`num_ctx` stays at 8192.** Job descriptions are truncated to fit rather than
+  raising the window, because context is the term that grows VRAM fastest.
+- **The model unloads between cycles.** Ollama calls pass `keep_alive: "5m"`, so the
+  GPU is free ~55 minutes of every hour instead of holding 5.2 GB pinned around the
+  clock. This is the single biggest change to sustained thermal load.
+- **OOM is terminal, not retried.** A CUDA OOM or Ollama 500 marks the cycle degraded
+  and stops. Retry loops on an OOMing GPU are what actually cook a laptop; we fail
+  loudly and let the next hour try fresh.
+
+### 12.2 Thermals and duty cycle
+
+- **Cycle wall-clock cap:** 20 minutes default. On expiry the run is cut short, marked
+  `partial`, and the remaining sources roll to the next cycle. Cycles can therefore
+  never overlap or stack up (`max_instances=1`, `coalesce=True`).
+- **AC-power gate:** on battery, scheduled scans are **skipped** (checked via
+  `Win32_Battery`). Sustained GPU inference is the worst thing you can do to a laptop
+  battery's health and to unplugged thermals. Manual "Scan now" still works on
+  battery — the user's explicit choice is always honoured.
+- **Quiet hours default to 01:00–07:00**, off by default in code but pre-filled in the
+  UI, so the machine gets a nightly rest window without the user thinking about it.
+- The scan is **I/O-bound, not GPU-bound**, by design: at most 25 LLM calls per hour
+  out of a 20-minute window. Measured duty cycle is well under 20%.
+
+### 12.3 Browser processes
+
+- At most **2 concurrent headless Chromium contexts**, and exactly **1 headed window**
+  (a login or an apply-prepare), enforced by semaphore. Chromium is the real RAM
+  consumer here — 15 GB total with a model resident leaves no room for a dozen tabs.
+- Every context is opened in a `try/finally` that closes it, and each scan cycle ends
+  with a sweep that kills any Playwright process it started and orphaned.
+- Stale profile locks (from a hard shutdown) are detected and cleared on next launch
+  rather than hanging the portal forever.
+
+### 12.4 Disk
+
+- `runs/` capped at the last 200 records; `output/` PDFs pruned beyond 500 files;
+  `embeddings.json` capped at 20k vectors (LRU by `first_seen`).
+- **All writes abort if free disk is under 2 GB**, with a clear surfaced warning. A
+  full system disk on Windows is far more damaging than a skipped scan.
+- `sessions/` and `embeddings.json` are gitignored so browser profiles and vectors can
+  never be committed.
+
+### 12.5 Network courtesy
+
+Per-host `rate_limit_s` and `daily_cap` are enforced by the scheduler, not left to
+each adapter. This protects the user's accounts and IP as much as it protects the
+target sites — hammering Naukri from a home connection is how a residential IP gets
+rate-limited for everyone in the house.
