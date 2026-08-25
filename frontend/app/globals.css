@@ -1,51 +1,97 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f5f5f7;
-  --surface: #ffffff;
-  --surface-translucent: rgba(255, 255, 255, 0.72);
-  --surface-2: #ebebee;
-  --foreground: #1d1d1f;
-  --muted: #6e6e73;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
-  --accent: #0071e3;
-  --accent-strong: #0059b3;
+  /* Aurora mesh — the animated page background */
+  --aurora-1: #ff8fd6;
+  --aurora-2: #8b7dff;
+  --aurora-3: #5ee7ff;
+  --aurora-4: #ffe08a;
+
+  --bg: #f7f4ff;
+  --foreground: #241b3d;
+  --muted: #6c6390;
+
+  /* Glass. --glass-scrim sits UNDER text so contrast never depends on
+     whatever the aurora happens to be doing behind the panel. */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-scrim: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.72);
+  --glass-blur: 20px;
+  --glass-shadow: 0 8px 32px rgba(120, 90, 200, 0.18);
+
+  --accent: #7c5cff;
+  --accent-strong: #5b3fd6;
   --accent-foreground: #ffffff;
-  --accent-wash: rgba(0, 113, 227, 0.08);
-  --danger: #d70015;
-  --danger-wash: rgba(255, 59, 48, 0.1);
-  --warning: #a85c00;
-  --warning-wash: rgba(255, 159, 10, 0.14);
-  --success: #0a7d32;
-  --success-wash: rgba(52, 199, 89, 0.14);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px -12px rgba(0, 0, 0, 0.12);
-  --shadow-elevated: 0 8px 16px rgba(0, 0, 0, 0.06), 0 30px 60px -20px rgba(0, 0, 0, 0.22);
+  --accent-wash: rgba(124, 92, 255, 0.12);
+
+  --danger: #d81b60;
+  --danger-wash: rgba(216, 27, 96, 0.12);
+  --warning: #b26a00;
+  --warning-wash: rgba(255, 176, 32, 0.16);
+  --success: #0f9d58;
+  --success-wash: rgba(15, 157, 88, 0.14);
+
+  --radius-card: 22px;
+  --radius-pill: 999px;
+  --spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+
+  /* v1 names, re-valued for glass. KEEP THESE — ~60 live references.
+     Deleting one fails silently and strips a component's surface. */
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-translucent: rgba(255, 255, 255, 0.55);
+  --surface-2: rgba(245, 240, 255, 0.72);
+  --border: rgba(124, 92, 255, 0.14);
+  --border-strong: rgba(124, 92, 255, 0.26);
+  --shadow-card: 0 4px 14px rgba(120, 90, 200, 0.10), 0 12px 34px -14px rgba(120, 90, 200, 0.22);
+  --shadow-elevated: 0 8px 32px rgba(120, 90, 200, 0.18), 0 30px 60px -20px rgba(120, 90, 200, 0.32);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-translucent: rgba(28, 28, 30, 0.72);
-    --surface-2: #2c2c2e;
-    --foreground: #f5f5f7;
-    --muted: #98989d;
-    --border: rgba(255, 255, 255, 0.09);
-    --border-strong: rgba(255, 255, 255, 0.16);
-    --accent: #0a84ff;
-    --accent-strong: #409cff;
-    --accent-foreground: #ffffff;
-    --accent-wash: rgba(10, 132, 255, 0.14);
-    --danger: #ff6961;
-    --danger-wash: rgba(255, 69, 58, 0.16);
-    --warning: #ffb340;
-    --warning-wash: rgba(255, 159, 10, 0.18);
-    --success: #32d74b;
-    --success-wash: rgba(50, 215, 75, 0.16);
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px -12px rgba(0, 0, 0, 0.5);
-    --shadow-elevated: 0 8px 16px rgba(0, 0, 0, 0.4), 0 30px 60px -20px rgba(0, 0, 0, 0.7);
+  :root:not([data-theme="light"]) {
+    --bg: #120e22;
+    --foreground: #f3efff;
+    --muted: #a79dcf;
+    --glass-bg: rgba(38, 30, 66, 0.55);
+    --glass-scrim: rgba(28, 22, 50, 0.82);
+    --glass-border: rgba(255, 255, 255, 0.14);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --accent: #a58bff;
+    --accent-strong: #c0adff;
+    --accent-wash: rgba(165, 139, 255, 0.18);
+    --danger: #ff7aa8;
+    --warning: #ffc457;
+    --success: #4ddc9a;
+    --surface: rgba(38, 30, 66, 0.62);
+    --surface-translucent: rgba(38, 30, 66, 0.55);
+    --surface-2: rgba(50, 40, 84, 0.72);
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35), 0 12px 34px -14px rgba(0, 0, 0, 0.5);
+    --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45), 0 30px 60px -20px rgba(0, 0, 0, 0.65);
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #120e22;
+  --foreground: #f3efff;
+  --muted: #a79dcf;
+  --glass-bg: rgba(38, 30, 66, 0.55);
+  --glass-scrim: rgba(28, 22, 50, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --accent: #a58bff;
+  --accent-strong: #c0adff;
+  --accent-wash: rgba(165, 139, 255, 0.18);
+  --danger: #ff7aa8;
+  --warning: #ffc457;
+  --success: #4ddc9a;
+  --surface: rgba(38, 30, 66, 0.62);
+  --surface-translucent: rgba(38, 30, 66, 0.55);
+  --surface-2: rgba(50, 40, 84, 0.72);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35), 0 12px 34px -14px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.45), 0 30px 60px -20px rgba(0, 0, 0, 0.65);
 }
 
 @theme inline {
@@ -60,8 +106,27 @@
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-success: var(--success);
+  --radius-card: var(--radius-card);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Glass surface — see --glass-scrim contrast rule above. Never place body
+   text directly on .glass alone. */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Put text on this, never directly on .glass — it guarantees the 4.5:1 floor
+   regardless of what the aurora is doing behind the panel. */
+.glass-scrim {
+  background: var(--glass-scrim);
+  border-radius: calc(var(--radius-card) - 6px);
 }
 
 * {
