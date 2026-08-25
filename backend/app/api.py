@@ -12,7 +12,16 @@ from app import config, llm, store
 from app.models import Profile
 from app.evaluate import evaluator
 from app.ingest import resume
+from app.routes import (
+    config as config_routes,
+    connections as connections_routes,
+    events as events_routes,
+    queue as queue_routes,
+    schedule as schedule_routes,
+    sources as sources_routes,
+)
 from app.sources import aggregators, careerops_scan, crawl_adapter, experience, visa
+from app.sources import registry
 from app.tailor import writer
 
 try:
@@ -52,6 +61,15 @@ app.add_middleware(
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["*"], allow_headers=["*"],
 )
+
+# Import every provider module so its @register runs before the first request.
+registry.load_providers()
+
+for _router in (
+    config_routes.router, sources_routes.router, connections_routes.router,
+    schedule_routes.router, queue_routes.router, events_routes.router,
+):
+    app.include_router(_router)
 
 
 @app.get("/health")
@@ -107,29 +125,6 @@ def put_profile(profile: Profile):
     """
     store.save_profile(profile)
     return profile
-
-
-@app.get("/config")
-def get_config():
-    """What the backend can actually do right now, so the UI can guide the user."""
-    provider = llm.provider()
-    # Each provider proves availability differently: the API needs a key, the
-    # CLI needs the claude binary (subscription auth), ollama needs a server.
-    if provider == "api":
-        llm_available = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    elif provider == "cli":
-        llm_available = llm.claude_cli_path() is not None
-    else:
-        llm_available = llm.ollama_available()
-    return {
-        "llm_available": llm_available,
-        "llm_provider": provider,
-        "llm_model": llm.OLLAMA_MODEL if provider == "ollama" else config.LLM_MODEL,
-        "pdf_available": pdf is not None,
-        "adzuna_available": bool(
-            os.environ.get("ADZUNA_APP_ID") and os.environ.get("ADZUNA_APP_KEY")
-        ),
-    }
 
 
 class CrawlUrl(BaseModel):
