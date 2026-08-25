@@ -17,11 +17,12 @@ asked to re-upload is recoverable; a hard 500 on every request is not.
 
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
 from app import config as cfg
-from app.models import Evaluation, Job, Profile
+from app.models import Connection, Evaluation, Job, Profile, QueueItem, ScanRun
 
 
 def _p(name: str) -> Path:
@@ -128,3 +129,151 @@ def mark_applied(job_id: str) -> None:
     ids = applied_ids()
     ids.add(job_id)
     _write_atomic(_p("applied_log.json"), json.dumps(sorted(ids)))
+
+
+# --- v2 -------------------------------------------------------------------
+#
+# Same two invariants as v1: writes are atomic, reads tolerate corruption. A
+# corrupt cache costs a rescan; a hard 500 on every request costs the product.
+
+MAX_RUNS = 200          # spec §12.4 — bounded history
+MIN_FREE_DISK_GB = 2.0  # spec §12.4 — never fill the system disk
+
+
+def free_disk_gb() -> float:
+    return shutil.disk_usage(str(cfg.DATA_DIR)).free / (1024 ** 3)
+
+
+def assert_disk_headroom() -> None:
+    """Refuse to write when the disk is nearly full.
+
+    A skipped scan is recoverable. A full Windows system disk is not.
+    """
+    free = free_disk_gb()
+    if free < MIN_FREE_DISK_GB:
+        raise RuntimeError(
+            f"Only {free:.1f} GB free on the LaunchPad data disk "
+            f"(need {MIN_FREE_DISK_GB:.1f} GB). Free some space and rerun."
+        )
+
+
+def _read_json(name: str, default):
+    text = _read_text(_p(name))
+    if text is None:
+        return default
+    try:
+        return json.loads(text)
+    except Exception:
+        return default
+
+
+def load_connections() -> dict[str, Connection]:
+    """Portal -> Connection. Never contains a credential (spec §6.3)."""
+    out: dict[str, Connection] = {}
+    for raw in _read_json("connections.json", []):
+        try:
+            c = Connection(**raw)
+        except Exception:
+            continue   # one bad record must not hide the rest
+        out[c.portal] = c
+    return out
+
+
+def save_connection(conn: Connection) -> None:
+    assert_disk_headroom()
+    conns = load_connections()
+    conns[conn.portal] = conn
+    _write_atomic(
+        _p("connections.json"),
+        json.dumps([c.model_dump() for c in conns.values()], indent=2),
+    )
+
+
+def delete_connection(portal: str) -> None:
+    conns = load_connections()
+    if conns.pop(portal, None) is None:
+        return
+    _write_atomic(
+        _p("connections.json"),
+        json.dumps([c.model_dump() for c in conns.values()], indent=2),
+    )
+
+
+def load_queue() -> list[QueueItem]:
+    items = []
+    for raw in _read_json("queue.json", []):
+        try:
+            items.append(QueueItem(**raw))
+        except Exception:
+            continue
+    return items
+
+
+def upsert_queue_item(item: QueueItem) -> None:
+    """Insert or replace by job_id, preserving insertion order."""
+    assert_disk_headroom()
+    items = load_queue()
+    for i, existing in enumerate(items):
+        if existing.job_id == item.job_id:
+            items[i] = item
+            break
+    else:
+        items.append(item)
+    _write_atomic(
+        _p("queue.json"), json.dumps([i.model_dump() for i in items], indent=2)
+    )
+
+
+def _runs_path() -> Path:
+    d = cfg.DATA_DIR / "runs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "runs.json"
+
+
+def save_run(run: ScanRun) -> None:
+    assert_disk_headroom()
+    runs = load_runs(limit=MAX_RUNS)
+    runs = [r for r in runs if r.id != run.id]
+    runs.insert(0, run)                       # newest first
+    del runs[MAX_RUNS:]                       # bounded history
+    _write_atomic(_runs_path(), json.dumps([r.model_dump() for r in runs], indent=2))
+
+
+def load_runs(limit: int = 50) -> list[ScanRun]:
+    text = _read_text(_runs_path())
+    if text is None:
+        return []
+    try:
+        raw = json.loads(text)
+    except Exception:
+        return []
+    out = []
+    for r in raw[:limit]:
+        try:
+            out.append(ScanRun(**r))
+        except Exception:
+            continue
+    return out
+
+
+def load_source_config() -> dict[str, bool]:
+    """User's explicit per-source on/off overrides. Absent key = use the default."""
+    raw = _read_json("sources.json", {})
+    return {k: bool(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+
+
+def set_source_enabled(key: str, enabled: bool) -> None:
+    assert_disk_headroom()
+    cfgmap = load_source_config()
+    cfgmap[key] = bool(enabled)
+    _write_atomic(_p("sources.json"), json.dumps(cfgmap, indent=2))
+
+
+def load_embeddings() -> dict[str, list[float]]:
+    raw = _read_json("embeddings.json", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def save_embeddings(vectors: dict[str, list[float]]) -> None:
+    assert_disk_headroom()
+    _write_atomic(_p("embeddings.json"), json.dumps(vectors))
