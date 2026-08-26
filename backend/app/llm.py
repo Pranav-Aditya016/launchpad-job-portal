@@ -197,6 +197,35 @@ def _complete_json_ollama(system: str, user: str, max_tokens: int) -> dict:
     return json.loads(content)
 
 
+def require_json_keys(d: object, required: tuple[str, ...], what: str) -> dict:
+    """Reject a reply that isn't the object we asked for.
+
+    Every call site here reads its fields with `.get(key, default)`, which turns
+    a wrong-shaped reply into a valid-looking empty result that gets saved and
+    counted as a success. That is not hypothetical: it silently produced 15
+    empty evaluations out of 41 on the dev machine before this guard existed.
+
+    Raises `ValueError`, deliberately, not `RuntimeError`: callers map
+    RuntimeError to "the config is broken, every item will fail identically"
+    and abort the whole batch. A bad reply is a per-item problem, so it must
+    land in the generic handler that records a warning and carries on (spec §7).
+    """
+    if not isinstance(d, dict):
+        raise ValueError(
+            f"{what}: model returned a {type(d).__name__}, expected a JSON "
+            f"object with keys {list(required)}"
+        )
+    missing = [k for k in required if k not in d]
+    if missing:
+        raise ValueError(
+            f"{what}: model ignored the schema — missing {missing}; it returned "
+            f"keys {sorted(d)[:10]}. On the local provider this usually means "
+            "the prompt overflowed the context window and the schema "
+            "instruction was truncated away."
+        )
+    return d
+
+
 def complete_json(system: str, user: str, max_tokens: int = 1500) -> dict:
     p = provider()
     if p == "ollama":
