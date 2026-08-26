@@ -7,23 +7,33 @@ interface ToggleProps {
   onChange: (checked: boolean) => void;
   label: string;
   description?: string;
+  /** Accessible name to use instead of `label` when the label is visually
+   *  redundant (e.g. a card title already shows it next to the switch). */
+  ariaLabel?: string;
 }
 
 // The thumb is a spring, not a CSS transition, so a rapid double-toggle
 // re-targets smoothly instead of restarting a keyframe from the top.
-export function Toggle({ checked, onChange, label, description }: ToggleProps) {
+export function Toggle({ checked, onChange, label, description, ariaLabel }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label ? undefined : ariaLabel}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-4 rounded-xl px-1 py-1.5 text-left"
+      className={
+        label
+          ? "flex w-full items-center justify-between gap-4 rounded-xl px-1 py-1.5 text-left"
+          : "flex shrink-0 items-center rounded-xl py-1.5 text-left"
+      }
     >
-      <span className="flex flex-col">
-        <span className="text-body font-medium text-foreground">{label}</span>
-        {description && <span className="text-caption text-muted">{description}</span>}
-      </span>
+      {label && (
+        <span className="flex flex-col">
+          <span className="text-body font-medium text-foreground">{label}</span>
+          {description && <span className="text-caption text-muted">{description}</span>}
+        </span>
+      )}
       <span
         className="relative inline-flex h-[26px] w-[46px] shrink-0 items-center rounded-full transition-colors duration-200"
         style={{ background: checked ? "var(--accent)" : "var(--border-strong)" }}

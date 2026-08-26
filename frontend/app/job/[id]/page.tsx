@@ -21,6 +21,7 @@ import { Badge } from "@/components/Badge";
 import { ScoreDial } from "@/components/ScoreDial";
 import { CopyButton } from "@/components/CopyButton";
 import { PrintCV } from "@/components/PrintCV";
+import { GlassCard } from "@/components/GlassCard";
 import { isEntryLevel, relativeDate } from "@/lib/utils";
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -135,7 +136,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       <div className="flex min-h-screen flex-col">
         <NavBar />
         <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-          <p className="text-headline">Job not found</p>
+          <p className="font-display text-headline">Job not found</p>
           <p className="text-body text-muted">It may have been removed from the local store.</p>
           <Link href="/dashboard" className="pressable text-accent font-medium">
             Back to dashboard
@@ -172,7 +173,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 <Badge tone="neutral">{job.source}</Badge>
                 {posted && <span className="text-caption text-muted">Posted {posted}</span>}
               </div>
-              <h1 className="text-title">{job.title}</h1>
+              <h1 className="font-display text-title">{job.title}</h1>
               <p className="text-body text-muted">
                 {job.company}
                 {job.location && <> · {job.location}</>}
@@ -185,18 +186,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </div>
             )}
 
-            <section className="flex flex-col gap-2 rounded-2xl border border-[color:var(--border)] bg-surface p-6 shadow-[var(--shadow-card)]">
-              <h2 className="text-headline">Full description</h2>
+            <GlassCard as="section" innerClassName="flex flex-col gap-2">
+              <h2 className="font-display text-headline">Full description</h2>
               <p className="text-body whitespace-pre-wrap text-foreground/90">
                 {job.description || "No description available."}
               </p>
-            </section>
+            </GlassCard>
           </div>
 
           {/* Side column — evaluation + actions */}
           <aside className="flex flex-col gap-6">
-            <section className="flex flex-col gap-4 rounded-2xl border border-[color:var(--border)] bg-surface p-6 shadow-[var(--shadow-card)]">
-              <h2 className="text-headline">Fit evaluation</h2>
+            <GlassCard as="section" innerClassName="flex flex-col gap-4">
+              <h2 className="font-display text-headline">Fit evaluation</h2>
               {ev ? (
                 <>
                   <div className="flex items-center gap-3">
@@ -248,10 +249,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   )}
                 </>
               )}
-            </section>
+            </GlassCard>
 
-            <section className="flex flex-col gap-4 rounded-2xl border border-[color:var(--border)] bg-surface p-6 shadow-[var(--shadow-card)]">
-              <h2 className="text-headline">Apply</h2>
+            <GlassCard as="section" innerClassName="flex flex-col gap-4">
+              <h2 className="font-display text-headline">Apply</h2>
 
               <Button onClick={handleApply} loading={applying} size="lg">
                 Open apply page
@@ -312,28 +313,28 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   </Button>
                 )}
               </div>
-            </section>
+            </GlassCard>
 
             {tailorResult?.cover_letter && (
-              <section className="flex flex-col gap-3 rounded-2xl border border-[color:var(--border)] bg-surface p-6 shadow-[var(--shadow-card)]">
+              <GlassCard as="section" innerClassName="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-headline">Cover letter</h2>
+                  <h2 className="font-display text-headline">Cover letter</h2>
                   <CopyButton text={tailorResult.cover_letter} />
                 </div>
                 <p className="text-body whitespace-pre-wrap text-foreground/90">
                   {tailorResult.cover_letter}
                 </p>
-              </section>
+              </GlassCard>
             )}
 
             {tailorResult?.pdf_available && (
-              <section className="flex flex-col gap-3 rounded-2xl border border-[color:var(--border)] bg-surface p-2 shadow-[var(--shadow-card)]">
+              <GlassCard as="section" innerClassName="p-2" noPadding>
                 <iframe
                   src={outputPdfUrl(id)}
                   title="Tailored CV preview"
                   className="h-[600px] w-full rounded-xl"
                 />
-              </section>
+              </GlassCard>
             )}
           </aside>
         </div>

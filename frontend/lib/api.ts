@@ -87,6 +87,40 @@ export interface ApplyResponse {
   url: string;
 }
 
+// See backend/app/routes/connections.py. GET is real; the three action
+// routes return HTTP 501 (naming the owning track) until Track C's session
+// vault lands — callers should treat 501 as "not live yet", not an error.
+export type ConnectionStatus = "disconnected" | "connected" | "expired" | "checking" | "blocked";
+
+export interface Connection {
+  portal: string;
+  label: string;
+  login_url: string;
+  status: ConnectionStatus;
+  last_verified: string | null;
+  note: string;
+  warning: string;
+}
+
+export interface ConnectionActionResult {
+  ok: boolean;
+  notYetImplemented: boolean;
+  message?: string;
+}
+
+// See backend/app/routes/sources.py.
+export type SourceKind = "public" | "ats" | "portal" | "crawl";
+
+export interface Source {
+  key: string;
+  label: string;
+  kind: SourceKind;
+  regions: string[];
+  requires_login: boolean;
+  enabled: boolean;
+  warning: string;
+}
+
 class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -160,6 +194,49 @@ export function apply(jobId: string): Promise<ApplyResponse> {
 
 export function outputPdfUrl(jobId: string): string {
   return `${API_URL}/output/${jobId}.pdf`;
+}
+
+export function getConnections(): Promise<{ connections: Connection[] }> {
+  return request<{ connections: Connection[] }>("/connections");
+}
+
+// The three action endpoints are wrapped so a 501 ("not yet implemented by
+// the owning track") resolves normally instead of throwing — callers show a
+// friendly "coming online shortly" state rather than an error explosion.
+async function connectionAction(path: string, init: RequestInit): Promise<ConnectionActionResult> {
+  try {
+    await request<unknown>(path, init);
+    return { ok: true, notYetImplemented: false };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 501) {
+      return { ok: false, notYetImplemented: true, message: e.message };
+    }
+    throw e;
+  }
+}
+
+export function startConnectionLogin(portal: string): Promise<ConnectionActionResult> {
+  return connectionAction(`/connections/${portal}/login`, { method: "POST" });
+}
+
+export function verifyConnection(portal: string): Promise<ConnectionActionResult> {
+  return connectionAction(`/connections/${portal}/verify`, { method: "POST" });
+}
+
+export function disconnectConnection(portal: string): Promise<ConnectionActionResult> {
+  return connectionAction(`/connections/${portal}`, { method: "DELETE" });
+}
+
+export function getSources(): Promise<{ sources: Source[] }> {
+  return request<{ sources: Source[] }>("/sources");
+}
+
+export function setSourceEnabled(key: string, enabled: boolean): Promise<{ key: string; enabled: boolean }> {
+  return request<{ key: string; enabled: boolean }>(`/sources/${key}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export { ApiError, API_URL };

@@ -2,6 +2,7 @@
 
 import type { Profile } from "@/lib/api";
 import { Field, TagListField } from "@/components/Field";
+import { GlassCard } from "@/components/GlassCard";
 
 interface ProfileCardProps {
   profile: Profile;
@@ -17,7 +18,7 @@ export function ProfileCard({ profile, onChange }: ProfileCardProps) {
   }
 
   return (
-    <div className="flex flex-col gap-5 rounded-2xl border border-[color:var(--border)] bg-surface p-6 shadow-[var(--shadow-card)]">
+    <GlassCard innerClassName="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Name" value={profile.name} onChange={(e) => set("name", e.target.value)} />
         <Field label="Email" value={profile.email} onChange={(e) => set("email", e.target.value)} />
@@ -55,6 +56,6 @@ export function ProfileCard({ profile, onChange }: ProfileCardProps) {
         These edits are a review pass in your browser only — scans and evaluations run against the
         resume file already on record. To change what the engine reads, upload a new resume.
       </p>
-    </div>
+    </GlassCard>
   );
 }

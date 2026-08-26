@@ -66,9 +66,15 @@ export function scoreTone(score: number): ScoreTone {
   return "poor";
 }
 
+// Some source adapters emit a raw Unix epoch (seconds) instead of ISO-8601 —
+// e.g. arbeitnow's "1786632957" — which `new Date()` can't parse and would
+// otherwise fall through to the raw-string fallback below, showing a
+// ten-digit number as the "posted" badge. Detect that shape first.
+const UNIX_SECONDS = /^\d{9,10}$/;
+
 export function relativeDate(iso: string | null): string | null {
   if (!iso) return null;
-  const then = new Date(iso);
+  const then = UNIX_SECONDS.test(iso) ? new Date(Number(iso) * 1000) : new Date(iso);
   if (Number.isNaN(then.getTime())) return iso;
   const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
   if (days <= 0) return "today";

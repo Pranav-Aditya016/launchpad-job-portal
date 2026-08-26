@@ -2,24 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/", label: "Upload" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/sources", label: "Sources" },
+  { href: "/connections", label: "Connections" },
 ];
 
-// Translucent, content-scrolls-under chrome (material() in globals.css) rather
-// than an opaque bar — see apple-design skill §12.
+// Sticky glass chrome, content scrolls under it (nav-glass in globals.css).
+// The active link gets a spring-animated pill (motion layoutId) that slides
+// between tabs instead of popping — see apple-design skill §12.
 export function NavBar() {
   const pathname = usePathname();
   return (
-    <header className="material no-print sticky top-0 z-40 border-b border-[color:var(--border)]">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
-        <Link href="/" className="text-headline tracking-[-0.01em]">
+    <header className="nav-glass no-print sticky top-0 z-40">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5">
+        <Link
+          href="/"
+          className="font-display text-headline tracking-[-0.01em] text-foreground shrink-0"
+        >
           LaunchPad
         </Link>
-        <nav className="flex items-center gap-1">
+        {/* overflow-x-auto rather than wrap or truncate: on a narrow phone
+            every tab stays reachable via a horizontal swipe instead of
+            silently falling off the edge of the screen. */}
+        <nav className="flex items-center gap-0.5 overflow-x-auto sm:gap-1">
           {LINKS.map((link) => {
             const active = pathname === link.href;
             return (
@@ -27,11 +37,19 @@ export function NavBar() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "pressable rounded-lg px-3 py-1.5 text-[0.875rem] font-medium transition-colors duration-150",
-                  active ? "bg-[color:var(--accent-wash)] text-accent" : "text-muted hover:text-foreground"
+                  "pressable relative shrink-0 rounded-full px-2.5 py-1 text-[0.8125rem] font-medium transition-colors duration-150 sm:px-3.5 sm:py-1.5 sm:text-[0.875rem]",
+                  active ? "text-accent-foreground" : "text-muted hover:text-foreground"
                 )}
               >
-                {link.label}
+                {active && (
+                  <motion.span
+                    layoutId="nav-active-pill"
+                    className="absolute inset-0 rounded-full bg-accent"
+                    style={{ boxShadow: "0 2px 10px rgba(124, 92, 255, 0.35)" }}
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                  />
+                )}
+                <span className="relative">{link.label}</span>
               </Link>
             );
           })}

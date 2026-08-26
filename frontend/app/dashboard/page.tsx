@@ -18,6 +18,7 @@ import { Field } from "@/components/Field";
 import { JobCard } from "@/components/JobCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
+import { GlassCard } from "@/components/GlassCard";
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -124,7 +125,7 @@ export default function DashboardPage() {
       <NavBar />
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
         <div className="flex flex-col gap-1">
-          <h1 className="text-title">Dashboard</h1>
+          <h1 className="font-display text-title">Dashboard</h1>
           <p className="text-body text-muted">
             {profile?.target_roles.length
               ? `Scanning for ${profile.target_roles.join(", ")}.`
@@ -133,7 +134,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Scan controls */}
-        <section className="flex flex-col gap-5 rounded-2xl border border-[color:var(--border)] bg-surface p-6 shadow-[var(--shadow-card)]">
+        <GlassCard as="section" innerClassName="flex flex-col gap-5">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
@@ -177,7 +178,7 @@ export default function DashboardPage() {
               description="Best-effort — slower, occasionally noisy"
             />
           </div>
-        </section>
+        </GlassCard>
 
         {/* Live status — never a frozen UI while long scans/evaluations run */}
         <AnimatePresence>

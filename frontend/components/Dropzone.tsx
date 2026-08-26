@@ -36,12 +36,21 @@ export function Dropzone({ onFile, accept = ".pdf,.docx,.doc,.txt", disabled }: 
         if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
       }}
       className={cn(
-        "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed px-8 py-16 text-center transition-[border-color,background-color,transform] duration-200",
+        "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed px-8 py-16 text-center transition-[border-color,background-color,transform] duration-200",
         dragging
           ? "border-accent bg-[color:var(--accent-wash)] scale-[1.01]"
-          : "border-[color:var(--border-strong)] hover:bg-surface-2",
+          : "border-[color:var(--border-strong)] hover:brightness-[1.02]",
         disabled && "pointer-events-none opacity-50"
       )}
+      style={
+        dragging
+          ? undefined
+          : {
+              background: "var(--glass-scrim)",
+              WebkitBackdropFilter: "blur(var(--glass-blur)) saturate(160%)",
+              backdropFilter: "blur(var(--glass-blur)) saturate(160%)",
+            }
+      }
     >
       <div
         className="flex h-14 w-14 items-center justify-center rounded-full"
@@ -52,7 +61,7 @@ export function Dropzone({ onFile, accept = ".pdf,.docx,.doc,.txt", disabled }: 
           <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
         </svg>
       </div>
-      <p className="text-headline">Drop your resume here</p>
+      <p className="font-display text-headline">Drop your resume here</p>
       <p className="text-body text-muted">or click to browse — PDF, DOCX, or TXT</p>
       <input
         ref={inputRef}

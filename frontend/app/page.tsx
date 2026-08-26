@@ -63,13 +63,18 @@ export default function UploadPage() {
     <div className="flex min-h-screen flex-col">
       <NavBar />
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-14">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-display">Let&apos;s get you hired.</h1>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+          className="flex flex-col gap-2"
+        >
+          <h1 className="font-display text-display">Let&apos;s get you hired.</h1>
           <p className="text-body text-muted max-w-lg">
             Upload your resume once. LaunchPad reads it, scans the roles that match, scores each
             one honestly, and tailors your application — you stay in control of every send.
           </p>
-        </div>
+        </motion.div>
 
         <AnimatePresence mode="wait">
           {stage === "loading" && (
@@ -158,7 +163,7 @@ export default function UploadPage() {
               transition={{ type: "spring", bounce: 0, duration: 0.35 }}
               className="flex flex-col gap-4"
             >
-              <p className="text-headline">Here&apos;s what we found</p>
+              <p className="font-display text-headline">Here&apos;s what we found</p>
               {looksThin && (
                 <div className="rounded-xl bg-[color:var(--warning-wash)] px-4 py-3 text-body text-warning">
                   This came back sparse — the parser may have struggled with your file. Feel free to
