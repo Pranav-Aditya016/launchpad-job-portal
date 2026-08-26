@@ -1,0 +1,10 @@
+<!doctype html>
+<html>
+<head><title>Fixture: login page that never completes</title></head>
+<body>
+  <h1>Sign in</h1>
+  <!-- Deliberately never inserts .logged-in-marker, so tests can exercise
+       the watcher's timeout path without waiting out the real 5-minute
+       LOGIN_TIMEOUT_S (tests monkeypatch that constant down first). -->
+</body>
+</html>

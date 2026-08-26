@@ -32,11 +32,15 @@ def test_connections_returns_a_list():
     assert isinstance(client.get("/connections").json()["connections"], list)
 
 
-def test_connection_actions_are_not_implemented_yet():
-    """501, not fake success — a stub that lies can ship unnoticed."""
-    r = client.post("/connections/naukri/login")
-    assert r.status_code == 501
-    assert "Track C" in r.json()["detail"]
+def test_connection_login_on_unknown_portal_is_404():
+    """Track C's session vault is live now; a portal that isn't registered is a 404,
+    not a fake success. (The real login/verify/disconnect flow against a
+    *registered* portal is exercised — with the Playwright launch mocked, never a
+    live site — in test_session_vault.py, which Track C owns.)
+    """
+    r = client.post("/connections/not-a-real-portal/login")
+    assert r.status_code == 404
+    assert "unknown portal" in r.json()["detail"]
 
 
 def test_schedule_read_works_and_write_is_not_implemented():

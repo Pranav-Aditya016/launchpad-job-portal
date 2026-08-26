@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><title>Fixture: login page</title></head>
+<body>
+  <h1>Sign in</h1>
+  <!-- No form fields here on purpose: this fixture stands in for a real
+       portal's login page in tests. The vault never fills or submits a form
+       — it only watches for `logged_in_selector` to appear, which this
+       script inserts after a short delay to stand in for a human completing
+       login by hand (password, OTP, CAPTCHA — all theirs, never automated).
+       Uses `.profile-name`, the same selector `portal_probe_loggedin.html`
+       carries, since a real adapter's logged_in_selector is one marker
+       checked both by the login watcher and by headless verify(). -->
+  <script>
+    setTimeout(function () {
+      var el = document.createElement('div');
+      el.className = 'profile-name';
+      el.textContent = 'Test User';
+      document.body.appendChild(el);
+    }, 400);
+  </script>
+</body>
+</html>
