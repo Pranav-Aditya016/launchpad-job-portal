@@ -1,4 +1,12 @@
-"""Autopilot schedule. Reads are real; writes wait for Track D's scheduler."""
+"""Autopilot schedule.
+
+`GET /schedule` returns the built-in `DEFAULT_SCHEDULE` constant below — there
+is no persisted schedule yet, so this is not reading from the store. `GET
+/runs` *is* genuinely backed by the store (`store.load_runs`). Track D must add
+a real persisted accessor (e.g. `store.load_schedule` / `store.save_schedule`)
+when it implements `PUT /schedule` and `POST /schedule/run-now`, both of which
+currently 501.
+"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel

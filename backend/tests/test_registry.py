@@ -7,9 +7,19 @@ from app.sources.base import FetchContext, SourceKind, SourceMeta
 
 @pytest.fixture(autouse=True)
 def clean_registry():
+    """Isolate this file's registrations without destroying the real registry.
+
+    `registry.clear()` empties a process-wide singleton. Leaving it cleared on
+    teardown would silently empty /sources and /connections for every test file
+    that runs after this one (pytest collects alphabetically), so we snapshot
+    and restore rather than just clearing twice.
+    """
+    saved, was_loaded = dict(registry._REGISTRY), registry._LOADED
     registry.clear()
     yield
-    registry.clear()
+    registry._REGISTRY.clear()
+    registry._REGISTRY.update(saved)
+    registry._LOADED = was_loaded
 
 
 def _make(key, **kw):
@@ -67,3 +77,29 @@ def test_load_providers_is_idempotent():
     first = len(registry.all_sources())
     registry.load_providers()
     assert len(registry.all_sources()) == first
+
+
+def test_nested_save_clear_restore_preserves_outer_registration():
+    """Prove the snapshot/restore logic in `clean_registry` actually restores state.
+
+    This inlines the exact same save -> clear -> restore sequence the fixture
+    performs, one level deeper — as if another test file's autouse fixture ran
+    while this file's registration was live. Against the OLD fixture (which
+    only did `registry.clear(); yield; registry.clear()`, with no snapshot and
+    no restore lines), the nested clear below would empty `_REGISTRY` and
+    nothing would ever put "outer" back — so the final assertion would fail
+    with `registry.get("outer") is None`. With the fix, it survives.
+    """
+    _make("outer")
+    assert registry.get("outer") is not None
+
+    # Exactly the fixture's save/clear/restore steps, nested one level deeper.
+    saved, was_loaded = dict(registry._REGISTRY), registry._LOADED
+    registry.clear()
+    assert registry.get("outer") is None  # the nested clear really did empty it
+    registry._REGISTRY.clear()
+    registry._REGISTRY.update(saved)
+    registry._LOADED = was_loaded
+
+    assert registry.get("outer") is not None
+    assert registry.get("outer").meta.key == "outer"

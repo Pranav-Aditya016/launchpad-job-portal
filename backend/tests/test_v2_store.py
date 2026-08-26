@@ -1,6 +1,6 @@
 import pytest
 
-from app.models import Connection, QueueItem, ScanRun
+from app.models import Connection, Profile, QueueItem, ScanRun
 
 
 @pytest.fixture(autouse=True)
@@ -93,3 +93,16 @@ def test_assert_disk_headroom_raises_when_space_is_low(tmp_data, monkeypatch):
     monkeypatch.setattr(store, "free_disk_gb", lambda: 0.4)
     with pytest.raises(RuntimeError, match="Only 0.4 GB free"):
         store.assert_disk_headroom()
+
+
+def test_disk_floor_covers_v1_writers_too(tmp_data, monkeypatch):
+    """The 2 GB floor (spec §12.4) is unconditional — it must also stop the
+    pre-existing v1 writers, not just the five v2 accessors. This is enforced
+    by hoisting the check into `_write_atomic`, the single choke point every
+    writer in this module funnels through, rather than calling it from each
+    v2 accessor individually.
+    """
+    store = tmp_data
+    monkeypatch.setattr(store, "free_disk_gb", lambda: 0.4)
+    with pytest.raises(RuntimeError, match="Only 0.4 GB free"):
+        store.save_profile(Profile(name="Ada"))

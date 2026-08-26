@@ -31,6 +31,9 @@ def _p(name: str) -> Path:
 
 def _write_atomic(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # mkdir first: free_disk_gb() calls shutil.disk_usage(DATA_DIR), which raises
+    # FileNotFoundError if that directory doesn't exist yet.
+    assert_disk_headroom()
     # Same directory as the target: os.replace is only atomic within a filesystem.
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
     try:
@@ -148,6 +151,12 @@ def assert_disk_headroom() -> None:
     """Refuse to write when the disk is nearly full.
 
     A skipped scan is recoverable. A full Windows system disk is not.
+
+    Enforced centrally in `_write_atomic` (spec §12.4: "All writes abort if free
+    disk is under 2 GB" — unconditionally, for every writer in this module, not
+    just the v2 accessors). Do not re-add per-call-site invocations of this
+    function elsewhere; that would just duplicate the check `_write_atomic`
+    already makes on every write.
     """
     free = free_disk_gb()
     if free < MIN_FREE_DISK_GB:
@@ -180,7 +189,6 @@ def load_connections() -> dict[str, Connection]:
 
 
 def save_connection(conn: Connection) -> None:
-    assert_disk_headroom()
     conns = load_connections()
     conns[conn.portal] = conn
     _write_atomic(
@@ -211,7 +219,6 @@ def load_queue() -> list[QueueItem]:
 
 def upsert_queue_item(item: QueueItem) -> None:
     """Insert or replace by job_id, preserving insertion order."""
-    assert_disk_headroom()
     items = load_queue()
     for i, existing in enumerate(items):
         if existing.job_id == item.job_id:
@@ -231,7 +238,6 @@ def _runs_path() -> Path:
 
 
 def save_run(run: ScanRun) -> None:
-    assert_disk_headroom()
     runs = load_runs(limit=MAX_RUNS)
     runs = [r for r in runs if r.id != run.id]
     runs.insert(0, run)                       # newest first
@@ -263,7 +269,6 @@ def load_source_config() -> dict[str, bool]:
 
 
 def set_source_enabled(key: str, enabled: bool) -> None:
-    assert_disk_headroom()
     cfgmap = load_source_config()
     cfgmap[key] = bool(enabled)
     _write_atomic(_p("sources.json"), json.dumps(cfgmap, indent=2))
@@ -275,5 +280,4 @@ def load_embeddings() -> dict[str, list[float]]:
 
 
 def save_embeddings(vectors: dict[str, list[float]]) -> None:
-    assert_disk_headroom()
     _write_atomic(_p("embeddings.json"), json.dumps(vectors))
