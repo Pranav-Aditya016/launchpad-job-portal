@@ -171,6 +171,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 {entryLevel && <Badge tone="success">Entry level</Badge>}
                 {job.applied && <Badge tone="accent">Applied</Badge>}
                 <Badge tone="neutral">{job.source}</Badge>
+                {job.region && <Badge tone="neutral">{job.region.toUpperCase()}</Badge>}
                 {posted && <span className="text-caption text-muted">Posted {posted}</span>}
               </div>
               <h1 className="font-display text-title">{job.title}</h1>
@@ -178,6 +179,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 {job.company}
                 {job.location && <> · {job.location}</>}
               </p>
+              {/* Provenance: exactly which source this came from, and a
+                  direct link to the real posting — separate from "Open apply
+                  page" below, which is the assisted-apply flow. */}
+              {SAFE_URL.test(job.url) && (
+                <a
+                  href={job.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pressable w-fit text-[0.875rem] font-medium text-accent hover:underline"
+                >
+                  View original posting on {job.source} ↗
+                </a>
+              )}
             </header>
 
             {ev?.scam_flag && ev.scam_reason && (

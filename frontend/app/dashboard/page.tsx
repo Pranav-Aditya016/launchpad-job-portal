@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ApiError,
   evaluate,
+  getCustomSites,
   getJobs,
   getProfile,
+  getSources,
   scan,
+  type CustomSite,
   type Job,
   type Profile,
+  type Source,
 } from "@/lib/api";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/Button";
@@ -19,11 +23,27 @@ import { JobCard } from "@/components/JobCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { GlassCard } from "@/components/GlassCard";
+import { FilterPanel } from "@/components/FilterPanel";
+import {
+  applyFilters,
+  buildRegionOptions,
+  buildSourceOptions,
+  DEFAULT_FILTERS,
+  isDefaultFilters,
+  type DashboardFilters,
+} from "@/lib/filters";
+
+// Filter state survives a reload — with ~850 jobs and growing, re-building a
+// carefully narrowed view every visit would be the annoying part, not the
+// filtering itself.
+const FILTERS_STORAGE_KEY = "launchpad:dashboard-filters:v1";
 
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [customSites, setCustomSites] = useState<CustomSite[]>([]);
   const [scanning, setScanning] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [sinceDays, setSinceDays] = useState(7);
@@ -34,6 +54,49 @@ export default function DashboardPage() {
   const [scanWarnings, setScanWarnings] = useState<string[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
+
+  // Load persisted filters once, client-side only — guarded so a corrupt or
+  // absent value never breaks the page, and never read during SSR (reading
+  // it synchronously in render would mismatch the server-rendered HTML,
+  // which always starts from DEFAULT_FILTERS). The `await null` mirrors the
+  // await-before-setState shape this app's other bootstrap effects use.
+  useEffect(() => {
+    let ignore = false;
+    async function bootstrap() {
+      await null;
+      if (ignore) return;
+      try {
+        const raw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
+        if (raw) setFilters({ ...DEFAULT_FILTERS, ...JSON.parse(raw) });
+      } catch {
+        // private browsing, corrupt value, etc. — fall back to defaults
+      } finally {
+        setFiltersLoaded(true);
+      }
+    }
+    bootstrap();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  // Persist on every change, once the initial load above has happened (so
+  // we don't immediately overwrite a saved value with the pre-load default).
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      // ignore — best-effort persistence only
+    }
+  }, [filters, filtersLoaded]);
+
+  function updateFilters(patch: Partial<DashboardFilters>) {
+    setFilters((cur) => ({ ...cur, ...patch }));
+  }
 
   const loadJobs = useCallback(async () => {
     setJobsLoading(true);
@@ -50,7 +113,15 @@ export default function DashboardPage() {
   useEffect(() => {
     let ignore = false;
     async function bootstrap() {
-      const [p, data] = await Promise.allSettled([getProfile(), getJobs()]);
+      // Sources/custom-sites are best-effort here — they only feed the
+      // filter panel's source labels/grouping, so a failure there shouldn't
+      // block the job list from loading.
+      const [p, data, s, c] = await Promise.allSettled([
+        getProfile(),
+        getJobs(),
+        getSources(),
+        getCustomSites(),
+      ]);
       if (ignore) return;
       if (p.status === "fulfilled") setProfile(p.value);
       if (data.status === "fulfilled") {
@@ -60,6 +131,8 @@ export default function DashboardPage() {
           data.reason instanceof ApiError ? data.reason.message : "Couldn't load jobs."
         );
       }
+      if (s.status === "fulfilled") setSources(s.value.sources);
+      if (c.status === "fulfilled") setCustomSites(c.value.sites);
       setJobsLoading(false);
     }
     bootstrap();
@@ -67,6 +140,13 @@ export default function DashboardPage() {
       ignore = true;
     };
   }, []);
+
+  const sourceGroups = useMemo(
+    () => buildSourceOptions(jobs, sources, customSites),
+    [jobs, sources, customSites]
+  );
+  const regionOptions = useMemo(() => buildRegionOptions(jobs), [jobs]);
+  const filteredJobs = useMemo(() => applyFilters(jobs, filters), [jobs, filters]);
 
   function startTimer() {
     setElapsed(0);
@@ -231,6 +311,20 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Filters — client-side over the already-fetched list, so results
+            update instantly with no round trip. */}
+        {jobs.length > 0 && (
+          <FilterPanel
+            filters={filters}
+            onChange={updateFilters}
+            sourceGroups={sourceGroups}
+            regionOptions={regionOptions}
+            resultCount={filteredJobs.length}
+            totalCount={jobs.length}
+            onClear={() => setFilters(DEFAULT_FILTERS)}
+          />
+        )}
+
         {/* Job list */}
         {jobsLoading ? (
           <div className="flex flex-col gap-3">
@@ -248,9 +342,23 @@ export default function DashboardPage() {
               </Button>
             }
           />
+        ) : filteredJobs.length === 0 ? (
+          <EmptyState
+            title="No jobs match your filters"
+            description={
+              isDefaultFilters(filters)
+                ? "Try adjusting your filters."
+                : "Try loosening a filter — a lower minimum score, a wider date range, or fewer selected sources usually finds something."
+            }
+            action={
+              <Button variant="secondary" onClick={() => setFilters(DEFAULT_FILTERS)}>
+                Clear filters
+              </Button>
+            }
+          />
         ) : (
           <div className="flex flex-col gap-3">
-            {jobs.map((job) => (
+            {filteredJobs.map((job) => (
               <JobCard key={job.id} job={job} />
             ))}
           </div>

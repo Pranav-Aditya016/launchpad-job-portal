@@ -44,6 +44,11 @@ export interface Job {
   sponsorship_ok?: boolean;
   // Whether the user has already used /apply/{id} for this job.
   applied?: boolean;
+  // "in" | "de" | "global" — from the source's meta. "" for older records.
+  region?: string;
+  // ISO-8601, set on first upsert. Null for records written before this
+  // field existed.
+  first_seen?: string | null;
 }
 
 export interface CrawlUrl {
@@ -108,8 +113,29 @@ export interface ConnectionActionResult {
   message?: string;
 }
 
-// See backend/app/routes/sources.py.
+// See backend/app/routes/sources.py and routes/schedule.py.
 export type SourceKind = "public" | "ats" | "portal" | "crawl";
+
+// Exactly five meanings, never blurred together in the UI:
+//  ok           ran, found jobs
+//  empty        ran, found nothing (see `detail` for why)
+//  error        ran, failed (see `detail`)
+//  needs_login  waiting on a portal connection — the user's next action, not a failure
+//  disabled     switched off
+export type SourceStatus = "ok" | "empty" | "error" | "disabled" | "needs_login" | "skipped";
+
+// What ONE source did during ONE scan run — the provenance record.
+export interface SourceResult {
+  key: string;
+  label: string;
+  kind: string;
+  status: SourceStatus;
+  jobs_found: number;
+  new_jobs: number;
+  duration_s: number;
+  detail: string;
+  target: string;
+}
 
 export interface Source {
   key: string;
@@ -119,6 +145,77 @@ export interface Source {
   requires_login: boolean;
   enabled: boolean;
   warning: string;
+  // What this source did the last time a scan ran, or null if it's never
+  // been part of a run yet. Present on GET /sources and GET /scan/coverage.
+  last: SourceResult | null;
+}
+
+export interface SourceCounts {
+  total: number;
+  enabled: number;
+  by_kind: Record<string, number>;
+}
+
+// The user's own websites — see backend/app/custom_sources.py.
+export interface CustomSite {
+  id: string;
+  url: string;
+  label: string;
+  regions: string[];
+  enabled: boolean;
+  notes: string;
+  last_status: SourceStatus | "";
+  last_jobs: number;
+  last_detail: string;
+}
+
+export interface AddCustomSiteRequest {
+  url: string;
+  label?: string;
+  regions?: string[];
+  notes?: string;
+}
+
+export interface ScanRunSummary {
+  id: string;
+  started: string;
+  finished: string | null;
+  trigger: "manual" | "scheduled";
+  per_source: Record<string, number>;
+  warnings: string[];
+  evaluated: number;
+  tailored: number;
+  partial: boolean;
+  results: SourceResult[];
+}
+
+// GET /scan/coverage — the transparency surface: every registered source
+// (on or off, ever run or not) plus every custom site, so "where did this
+// job come from?" and "what am I missing?" both have real answers.
+export interface CoverageResponse {
+  last_run: ScanRunSummary | null;
+  sources: Source[];
+  custom_sites: Pick<
+    CustomSite,
+    "id" | "url" | "label" | "enabled" | "last_status" | "last_jobs" | "last_detail"
+  >[];
+}
+
+export interface RunNowRequest {
+  source_keys?: string[];
+  regions?: string[];
+}
+
+export interface RunNowResponse {
+  run_id: string;
+  started: string;
+  finished: string | null;
+  jobs_found: number;
+  jobs_new: number;
+  sources_considered: number;
+  sources_ok: number;
+  results: SourceResult[];
+  warnings: string[];
 }
 
 class ApiError extends Error {
@@ -227,8 +324,8 @@ export function disconnectConnection(portal: string): Promise<ConnectionActionRe
   return connectionAction(`/connections/${portal}`, { method: "DELETE" });
 }
 
-export function getSources(): Promise<{ sources: Source[] }> {
-  return request<{ sources: Source[] }>("/sources");
+export function getSources(): Promise<{ sources: Source[]; counts: SourceCounts }> {
+  return request<{ sources: Source[]; counts: SourceCounts }>("/sources");
 }
 
 export function setSourceEnabled(key: string, enabled: boolean): Promise<{ key: string; enabled: boolean }> {
@@ -236,6 +333,48 @@ export function setSourceEnabled(key: string, enabled: boolean): Promise<{ key: 
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
+  });
+}
+
+// --- the user's own websites -------------------------------------------
+
+export function getCustomSites(): Promise<{ sites: CustomSite[] }> {
+  return request<{ sites: CustomSite[] }>("/sources/custom");
+}
+
+export function addCustomSite(
+  body: AddCustomSiteRequest
+): Promise<{ id: string; url: string; label: string; regions: string[]; enabled: boolean }> {
+  return request("/sources/custom", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function setCustomSiteEnabled(id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> {
+  return request<{ id: string; enabled: boolean }>(`/sources/custom/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function deleteCustomSite(id: string): Promise<{ id: string; deleted: boolean }> {
+  return request<{ id: string; deleted: boolean }>(`/sources/custom/${id}`, { method: "DELETE" });
+}
+
+// --- transparency: what LaunchPad actually looked at ---------------------
+
+export function getCoverage(): Promise<CoverageResponse> {
+  return request<CoverageResponse>("/scan/coverage");
+}
+
+export function runNow(body: RunNowRequest = {}): Promise<RunNowResponse> {
+  return request<RunNowResponse>("/schedule/run-now", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 

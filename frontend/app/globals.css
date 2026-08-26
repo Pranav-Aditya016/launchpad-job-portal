@@ -357,6 +357,47 @@ body {
   animation: status-pulse-ring 1.6s ease-in-out infinite;
 }
 
+/* Dashboard filter panel — min-score range input, styled to match the
+   pill-and-glass language rather than the browser default track/thumb. */
+.range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  outline: none;
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--glass-scrim);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 120ms ease-out;
+}
+.range-input::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+.range-input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--glass-scrim);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.range-input::-moz-range-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+
 .print-only {
   display: none;
 }

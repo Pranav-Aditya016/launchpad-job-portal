@@ -84,3 +84,58 @@ export function relativeDate(iso: string | null): string | null {
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
 }
+
+// Whole days between now and an ISO-8601 (or Unix-seconds) timestamp, or
+// null when the value is missing/unparseable — used by the dashboard's date
+// filter, kept separate from relativeDate() because that one always returns
+// display text, never a number to compare against.
+export function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const then = UNIX_SECONDS.test(iso) ? new Date(Number(iso) * 1000) : new Date(iso);
+  if (Number.isNaN(then.getTime())) return null;
+  return Math.floor((Date.now() - then.getTime()) / 86_400_000);
+}
+
+// --- source provenance -----------------------------------------------------
+// Job.source values don't line up 1:1 with registry keys: the registry calls
+// a public board "public:remoteok" but the Job it produces is stamped just
+// "remoteok" (see backend/app/sources/public_*.py), and a user's own website
+// is stamped "custom:<site-id>" — a key that only exists in the custom-sites
+// list, never in the registry. This resolves either shape back to a real
+// label + kind for display, so a raw internal key never leaks into the UI.
+import type { CustomSite, Source, SourceKind } from "@/lib/api";
+
+// Shared with the Sources page and the dashboard's source filter, so a kind
+// is labeled identically everywhere it appears.
+export const KIND_LABEL: Record<string, string> = {
+  public: "Public boards",
+  ats: "ATS boards",
+  portal: "Portals (login required)",
+  crawl: "Your websites",
+  other: "Other",
+};
+
+export const KIND_ORDER: SourceKind[] = ["public", "ats", "portal", "crawl"];
+
+export interface ResolvedSource {
+  key: string;
+  kind: string;
+  label: string;
+}
+
+export function resolveSourceMeta(
+  key: string,
+  sources: Source[],
+  customSites: CustomSite[]
+): ResolvedSource {
+  if (key.startsWith("custom:")) {
+    const id = key.slice("custom:".length);
+    const site = customSites.find((s) => s.id === id);
+    return { key, kind: "crawl", label: site?.label || site?.url || "Your website" };
+  }
+  const direct = sources.find((s) => s.key === key);
+  if (direct) return { key, kind: direct.kind, label: direct.label };
+  const withPublicPrefix = sources.find((s) => s.key === `public:${key}`);
+  if (withPublicPrefix) return { key, kind: withPublicPrefix.kind, label: withPublicPrefix.label };
+  return { key, kind: "other", label: key };
+}
