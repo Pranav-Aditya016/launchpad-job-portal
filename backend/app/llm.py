@@ -52,6 +52,34 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/"
 # follows JSON instructions well. Override for a different local model.
 OLLAMA_MODEL = os.environ.get("LAUNCHPAD_OLLAMA_MODEL", "qwen3:8b")
 
+# Context window for local calls. Held at 8192 deliberately: on an 8GB card
+# context is the term that grows VRAM fastest, so we truncate the prompt to
+# fit rather than raising this.
+OLLAMA_NUM_CTX = 8192
+
+# Measured on qwen3:8b against real job postings: ~3.9 chars/token. We budget
+# at 3.5 to stay conservative.
+_CHARS_PER_TOKEN = 3.5
+
+
+def prompt_budget_chars(max_tokens: int = 1500) -> int:
+    """How many characters of prompt a caller may send.
+
+    This exists because **Ollama silently truncates an over-long prompt, and it
+    drops the OLDEST tokens first** — which is the system message. A caller that
+    ignores this budget doesn't get a degraded answer, it gets an answer to a
+    different question: the model never sees the schema instruction and invents
+    its own output shape. That failure is invisible downstream, because every
+    field then reads as a missing key.
+
+    Hosted models have ~200k of context, so the budget only bites locally.
+    """
+    if provider() != "ollama":
+        return 200_000
+    # Reserve the reply, plus a margin for chat-template and role overhead.
+    usable_tokens = OLLAMA_NUM_CTX - max_tokens - 256
+    return max(2_000, int(usable_tokens * _CHARS_PER_TOKEN))
+
 
 def ollama_available() -> bool:
     try:
@@ -141,7 +169,11 @@ def _complete_json_ollama(system: str, user: str, max_tokens: int) -> dict:
         "format": "json",
         "stream": False,
         "think": False,  # Qwen3 emits <think> blocks otherwise
-        "options": {"temperature": 0.2, "num_ctx": 8192, "num_predict": max_tokens},
+        "options": {
+            "temperature": 0.2,
+            "num_ctx": OLLAMA_NUM_CTX,
+            "num_predict": max_tokens,
+        },
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
