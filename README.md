@@ -6,10 +6,34 @@ range of public job boards, scores each role against your CV with LLM-driven rea
 cover letter per job, and gives you a one-click **assisted apply** — it opens the real
 application page for you to submit yourself.
 
+## Status
+
+**v1 is complete and working** on `master`. Everything described below runs today.
+
+**v2 ("Offline Autopilot") is in progress** on `launchpad-v2`. Its goal is to run the
+entire evaluation and writing pipeline **locally** — no API key, no cloud LLM — while
+scanning far more sources every hour and stacking prepared applications in a review
+queue.
+
+The first slice, **Track 0**, has landed: the shared contracts that let the remaining
+five work-tracks proceed in parallel (a plugin source registry, six split routers, the
+`Source` protocol, v2 models and store accessors, glass design tokens, and tests that
+enforce the product boundaries below). **No new job source is registered yet** — scanning
+still runs the v1 path until Tracks B and D land.
+
+- Design: [`docs/superpowers/specs/2026-08-26-launchpad-v2-offline-autopilot-design.md`](docs/superpowers/specs/2026-08-26-launchpad-v2-offline-autopilot-design.md)
+- If you're picking up the work: [`docs/superpowers/TRACK-0-HANDOFF.md`](docs/superpowers/TRACK-0-HANDOFF.md)
+
 ## Boundaries
 
-- **Public, no-login sources only.** LaunchPad never logs into a job board or ATS on your
-  behalf, and never bypasses authentication anywhere.
+These are deliberate, enforced by tests (`backend/tests/test_no_autosubmit.py`), and not
+up for reversal.
+
+- **LaunchPad never stores a credential and never bypasses authentication.** v1 uses
+  public, no-login sources only. v2 adds login-gated portals, but only by opening a real
+  browser window for **you** to log in yourself — LaunchPad persists the resulting
+  browser session on local disk and never sees your password, OTP, or security answers.
+  There is no field for them anywhere in the system.
 - **LaunchPad never submits an application for you.** The "Open apply page" button opens
   the real employer application page in a new browser tab; you review it and hit submit
   yourself. This is deliberate: bot-submitted applications get accounts banned and
@@ -21,8 +45,16 @@ application page for you to submit yourself.
 - **Node.js ≥ 18** (career-ops' `package.json` requires it)
 - **Python ≥ 3.11**
 - **git**
-- **`ANTHROPIC_API_KEY`** — required for `/evaluate` (fit scoring) and `/tailor`
-  (CV/cover-letter generation). Discovery/scanning (`/scan`) works fully **without** it.
+- **An LLM provider** for `/evaluate` (fit scoring) and `/tailor` (CV/cover-letter
+  generation). Discovery/scanning (`/scan`) works fully **without** one. Three are
+  supported, selected automatically or via `LAUNCHPAD_LLM=api|cli|ollama`:
+  - **`ollama`** — fully local and offline, no key, no cost. The v2 default. Needs
+    [Ollama](https://ollama.com) running and a model pulled (`ollama pull qwen3:8b`).
+  - **`cli`** — the Claude Code CLI (`claude -p`), using a Pro/Max subscription rather
+    than API credits.
+  - **`api`** — the Anthropic API with `ANTHROPIC_API_KEY`. As of v2 the `anthropic`
+    SDK is an **optional** extra: `pip install -e "backend[hosted]"`. A default install
+    pulls no cloud SDK at all.
 
 ## Setup
 
