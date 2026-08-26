@@ -149,6 +149,36 @@ class Connection(BaseModel):
         return _to_str(v)
 
 
+SourceStatus = Literal["ok", "empty", "error", "disabled", "needs_login", "skipped"]
+
+
+class SourceResult(BaseModel):
+    """What happened to ONE source during ONE scan.
+
+    This model exists for transparency. Without it the UI can only show which
+    sources are *registered*, which quietly implies they were all consulted and
+    all worked. A source that returned nothing, was switched off, errored, or
+    is waiting on a login is a materially different thing, and the user needs
+    to see which — otherwise they cannot know where their jobs came from, or
+    which sites they are silently missing.
+    """
+
+    key: str
+    label: str
+    kind: str
+    status: SourceStatus = "ok"
+    jobs_found: int = 0
+    new_jobs: int = 0
+    duration_s: float = 0.0
+    detail: str = ""          # error text, or why it was skipped
+    target: str = ""          # what it actually hit, for "where did this come from"
+
+    @field_validator("detail", "target", mode="before")
+    @classmethod
+    def _coerce_str(cls, v):
+        return _to_str(v)
+
+
 class ScanRun(BaseModel):
     """One scan cycle, manual or scheduled."""
 
@@ -161,6 +191,7 @@ class ScanRun(BaseModel):
     evaluated: int = 0
     tailored: int = 0
     partial: bool = False   # True when the 20-minute cycle cap cut the run short
+    results: list[SourceResult] = Field(default_factory=list)
 
     @field_validator("warnings", mode="before")
     @classmethod

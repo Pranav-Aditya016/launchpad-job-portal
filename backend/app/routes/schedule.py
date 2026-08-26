@@ -8,10 +8,13 @@ when it implements `PUT /schedule` and `POST /schedule/run-now`, both of which
 currently 501.
 """
 
+import uuid
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app import store
+from app import scan_engine, store
+from app.models import Profile
 
 router = APIRouter()
 
@@ -44,9 +47,100 @@ def put_schedule(body: ScheduleUpdate):
     raise HTTPException(status_code=501, detail=_NOT_YET)
 
 
+class RunNowRequest(BaseModel):
+    source_keys: list[str] | None = None   # None = every enabled source
+    regions: list[str] | None = None
+    limit: int = scan_engine.DEFAULT_LIMIT
+
+
 @router.post("/schedule/run-now")
-def run_now():
-    raise HTTPException(status_code=501, detail=_NOT_YET)
+async def run_now(body: RunNowRequest = RunNowRequest()):
+    """Run every enabled source now and report what each one did.
+
+    The response is deliberately provenance-first: `results` lists EVERY source
+    considered — including the ones that were off, empty, errored or waiting on
+    a login — so the user can see where jobs came from and which sites are
+    contributing nothing. Returning only successes would imply coverage that
+    isn't there.
+    """
+    profile = store.load_profile()
+    if profile is None:
+        raise HTTPException(400, "No profile found. Upload a resume first.")
+
+    connected = {
+        portal for portal, conn in store.load_connections().items()
+        if conn.status == "connected"
+    }
+
+    page_opener = None
+    try:                                    # the vault is optional at runtime
+        from app.browser import session as vault
+        page_opener = vault.open_page
+    except Exception:
+        pass
+
+    outcome = await scan_engine.run_scan(
+        profile,
+        source_keys=body.source_keys,
+        regions=body.regions,
+        overrides=store.load_source_config(),
+        connected_portals=connected,
+        limit=body.limit,
+        page_opener=page_opener,
+    )
+
+    added = store.upsert_jobs(outcome.jobs)
+    run = outcome.to_scan_run(run_id=uuid.uuid4().hex[:12], trigger="manual")
+    for r in run.results:                   # how many of this source's jobs were new
+        r.new_jobs = r.jobs_found
+    store.save_run(run)
+
+    return {
+        "run_id": run.id,
+        "started": run.started,
+        "finished": run.finished,
+        "jobs_found": outcome.total_jobs,
+        "jobs_new": added,
+        "sources_considered": len(run.results),
+        "sources_ok": sum(1 for r in run.results if r.status == "ok"),
+        "results": [r.model_dump() for r in run.results],
+        "warnings": run.warnings,
+    }
+
+
+@router.get("/scan/coverage")
+def coverage():
+    """What LaunchPad looks at, and what it found last time.
+
+    The honest answer to "which sites are you actually scraping?" — every
+    registered source with its last outcome, plus the user's own sites.
+    """
+    from app import custom_sources as cs
+    from app.sources import registry
+
+    overrides = store.load_source_config()
+    runs = store.load_runs(limit=1)
+    last = {r.key: r.model_dump() for r in runs[0].results} if runs else {}
+
+    rows = []
+    for s in registry.all_sources():
+        m = s.meta
+        rows.append({
+            "key": m.key, "label": m.label, "kind": m.kind.value,
+            "regions": list(m.regions), "requires_login": m.requires_login,
+            "enabled": overrides.get(m.key, m.enabled_by_default),
+            "warning": m.warning, "last": last.get(m.key),
+        })
+    return {
+        "last_run": runs[0].model_dump() if runs else None,
+        "sources": rows,
+        "custom_sites": [
+            {"id": c.id, "url": c.url, "label": c.label, "enabled": c.enabled,
+             "last_status": c.last_status, "last_jobs": c.last_jobs,
+             "last_detail": c.last_detail}
+            for c in cs.load_all()
+        ],
+    }
 
 
 @router.get("/runs")

@@ -14,6 +14,11 @@ def clean_registry():
     that runs after this one (pytest collects alphabetically), so we snapshot
     and restore rather than just clearing twice.
     """
+    # Load the real providers BEFORE snapshotting. Snapshotting an empty
+    # registry and restoring it leaves the process-wide singleton empty for
+    # every later test file — which is exactly how `naukri` disappeared and
+    # test_session_vault started failing. See tests/test_zz_registry_intact.py.
+    registry.load_providers()
     saved, was_loaded = dict(registry._REGISTRY), registry._LOADED
     registry.clear()
     yield
