@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1967513,
+    "name": "P\u00e4dagogisches Fachpersonal gesucht",
+    "employment_type": "Festanstellung",
+    "seniority": "Berufseinstieg",
+    "keywords": "",
+    "description": "",
+    "office": "M\u00fcnchen",
+    "offices": [
+      "M\u00fcnchen"
+    ],
+    "schedule": "Voll- oder Teilzeit",
+    "category": "Temporary Staffing",
+    "department": "Temporary Staffing",
+    "subcompany": "MEDWING NOW GmbH"
+  },
+  {
+    "id": 1975646,
+    "name": "Examinierter Gesundheits- und Krankenpfleger (GKP) (m/w/d)",
+    "employment_type": "Festanstellung",
+    "seniority": "Berufserfahren",
+    "keywords": "",
+    "description": "",
+    "office": "Hamburg",
+    "offices": [
+      "Hamburg"
+    ],
+    "schedule": "Voll- oder Teilzeit",
+    "category": "",
+    "department": "Temporary Staffing",
+    "subcompany": "MEDWING NOW GmbH"
+  }
+]

@@ -1,0 +1,165 @@
+{
+  "content": [
+    {
+      "id": "744000145779944",
+      "name": "Part-time Shuttle Driver (Vancouver International Airport)",
+      "uuid": "c28f8e14-53d9-493d-a1d6-b1e133b567ae",
+      "jobAdId": "104eadd4-bac0-42eb-a383-f0114f714dbb",
+      "defaultJobAd": true,
+      "refNumber": "REF28641M",
+      "company": {
+        "identifier": "SIXT",
+        "name": "SIXT"
+      },
+      "releasedDate": "2026-08-26T15:59:41.197Z",
+      "location": {
+        "city": "Richmond",
+        "region": "British Columbia",
+        "country": "ca",
+        "postalCode": "V7B 1W4",
+        "remote": false,
+        "hybrid": false,
+        "fullLocation": "Richmond, British Columbia, Canada"
+      },
+      "industry": {
+        "id": "leisure_and_travel",
+        "label": "Leisure And Travel"
+      },
+      "department": {
+        "id": "3310043",
+        "label": "Branches & Operations"
+      },
+      "function": {
+        "id": "customer_service",
+        "label": "Customer Service"
+      },
+      "typeOfEmployment": {
+        "id": "part-time",
+        "label": "Part-time"
+      },
+      "experienceLevel": {
+        "id": "entry_level",
+        "label": "Entry Level"
+      },
+      "customField": [
+        {
+          "fieldId": "COUNTRY",
+          "fieldLabel": "Country/Region",
+          "valueId": "ca",
+          "valueLabel": "Canada"
+        },
+        {
+          "fieldId": "628252b182ea77507014cb5d",
+          "fieldLabel": "Department",
+          "valueId": "3310043",
+          "valueLabel": "Branches & Operations"
+        },
+        {
+          "fieldId": "628252b182ea77507014cb5c",
+          "fieldLabel": "Brands",
+          "valueId": "3a0ee43c-a3a4-4b96-af67-dee8b0165d64",
+          "valueLabel": "SIXT Canada"
+        },
+        {
+          "fieldId": "6299e8d6e54cc35a67877735",
+          "fieldLabel": "Legal Entity",
+          "valueId": "COMP_0050",
+          "valueLabel": "SIXT Rent A Car Inc."
+        },
+        {
+          "fieldId": "6299ea891837eb0875aeb398",
+          "fieldLabel": "Key Words",
+          "valueLabel": "shuttle driver"
+        }
+      ],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sixt/postings/744000145779944",
+      "creator": {
+        "name": "Shadaisha Summerall"
+      },
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "744000145781770",
+      "name": "Vehicle Service Agent (Vancouver International Airport)",
+      "uuid": "23c22923-94c4-4038-ad77-d9b8c42d4ae1",
+      "jobAdId": "83fbbd93-18db-4ffe-905a-91a3ee7d53c3",
+      "defaultJobAd": true,
+      "refNumber": "REF29863D",
+      "company": {
+        "identifier": "SIXT",
+        "name": "SIXT"
+      },
+      "releasedDate": "2026-08-26T15:52:08.184Z",
+      "location": {
+        "city": "Richmond",
+        "region": "British Columbia",
+        "country": "ca",
+        "postalCode": "V7B 1W4",
+        "remote": false,
+        "hybrid": false,
+        "fullLocation": "Richmond, British Columbia, Canada"
+      },
+      "industry": {
+        "id": "leisure_and_travel",
+        "label": "Leisure And Travel"
+      },
+      "department": {
+        "id": "3310043",
+        "label": "Branches & Operations"
+      },
+      "function": {
+        "id": "customer_service",
+        "label": "Customer Service"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "entry_level",
+        "label": "Entry Level"
+      },
+      "customField": [
+        {
+          "fieldId": "COUNTRY",
+          "fieldLabel": "Country/Region",
+          "valueId": "ca",
+          "valueLabel": "Canada"
+        },
+        {
+          "fieldId": "628252b182ea77507014cb5d",
+          "fieldLabel": "Department",
+          "valueId": "3310043",
+          "valueLabel": "Branches & Operations"
+        },
+        {
+          "fieldId": "628252b182ea77507014cb5c",
+          "fieldLabel": "Brands",
+          "valueId": "3a0ee43c-a3a4-4b96-af67-dee8b0165d64",
+          "valueLabel": "SIXT Canada"
+        },
+        {
+          "fieldId": "6299e8d6e54cc35a67877735",
+          "fieldLabel": "Legal Entity",
+          "valueId": "COMP_0050",
+          "valueLabel": "SIXT Rent A Car Inc."
+        }
+      ],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Sixt/postings/744000145781770",
+      "creator": {
+        "name": "Shadaisha Summerall"
+      },
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    }
+  ]
+}

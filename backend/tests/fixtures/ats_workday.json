@@ -1,0 +1,23 @@
+{
+  "total": 2000,
+  "jobPostings": [
+    {
+      "title": "SAP SuccessFactors Senior Manager",
+      "externalPath": "/job/London/SAP-SuccessFactors-Senior-Manager_R00299052",
+      "postedOn": "Posted Today",
+      "bulletFields": [
+        "R00299052",
+        "Location Negotiable"
+      ]
+    },
+    {
+      "title": "Business Development Representative | Senior Analyst",
+      "externalPath": "/job/Heredia/Business-Development-Representative---Senior-Analyst_R00352976",
+      "postedOn": "Posted Today",
+      "bulletFields": [
+        "R00352976",
+        "Heredia"
+      ]
+    }
+  ]
+}

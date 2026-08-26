@@ -1,0 +1,44 @@
+{
+  "_note": "SCHEMA-DERIVED, NOT A LIVE CAPTURE. Every live call to this API 403'd from this environment (see app/sources/providers/public_arbeitsagentur.py module docstring for what was tried). This fixture follows the response shape documented in bundesAPI/jobsuche-api's openapi.yaml so the parser has something real to be tested against; it is not evidence the adapter works end-to-end against the live API.",
+  "maxErgebnisse": 2,
+  "page": 1,
+  "size": 25,
+  "stellenangebote": [
+    {
+      "hashId": "abc123hash",
+      "beruf": "Softwareentwickler (m/w/d)",
+      "refnr": "10001-1234567890-S",
+      "arbeitgeber": "Muster GmbH",
+      "aktuelleVeroeffentlichungsdatum": "2026-08-20",
+      "eintrittsdatum": "2026-09-01",
+      "externeUrl": "https://www.example-employer.de/karriere/softwareentwickler",
+      "modifikationsTimestamp": "2026-08-20T09:00:00.000+02:00",
+      "arbeitsort": {
+        "plz": "10115",
+        "ort": "Berlin",
+        "strasse": "Musterstr. 1",
+        "region": "Berlin",
+        "land": "Deutschland",
+        "koordinaten": {"lat": 52.5321, "lon": 13.3846}
+      }
+    },
+    {
+      "hashId": "def456hash",
+      "beruf": "Data Engineer",
+      "refnr": "10001-9876543210-S",
+      "arbeitgeber": "Beispiel AG",
+      "aktuelleVeroeffentlichungsdatum": "2026-08-22",
+      "eintrittsdatum": "sofort",
+      "externeUrl": "",
+      "modifikationsTimestamp": "2026-08-22T11:30:00.000+02:00",
+      "arbeitsort": {
+        "plz": "80331",
+        "ort": "München",
+        "strasse": "",
+        "region": "Bayern",
+        "land": "Deutschland",
+        "koordinaten": {"lat": 48.1372, "lon": 11.5755}
+      }
+    }
+  ]
+}

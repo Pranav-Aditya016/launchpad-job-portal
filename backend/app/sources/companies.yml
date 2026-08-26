@@ -1,0 +1,101 @@
+# ATS-backed company registry (Track B).
+#
+# Every entry below was hit live and verified to return real, currently-open
+# postings at verification time (2026-08-26) — see .superpowers/track-b-report.md
+# for the raw counts. This file intentionally does NOT include every company
+# that was tried; a lot of plausible slugs 404 or return zero postings, and a
+# registry full of dead entries is worse than a short one.
+#
+# Schema:
+#   name:    display name, used to build Job.company and job_id()
+#   ats:     greenhouse | lever | ashby | smartrecruiters | workable |
+#            recruitee | personio | workday
+#   slug:    the company's identifier on that ATS (case-sensitive for some
+#            platforms — smartrecruiters and workday care about case)
+#   regions: ISO-ish region tags for Job.region; first entry is primary
+#   wd_host / site: workday only — tenant URLs vary per company, so both are
+#            required explicitly rather than guessed
+
+# --- Greenhouse (boards-api.greenhouse.io) -----------------------------
+- {name: Databricks,   ats: greenhouse, slug: databricks,  regions: [global]}
+- {name: Postman,      ats: greenhouse, slug: postman,     regions: [global]}
+- {name: Anthropic,    ats: greenhouse, slug: anthropic,   regions: [global]}
+- {name: Figma,        ats: greenhouse, slug: figma,       regions: [global]}
+- {name: Stripe,       ats: greenhouse, slug: stripe,      regions: [global]}
+- {name: Cloudflare,   ats: greenhouse, slug: cloudflare,  regions: [global]}
+- {name: Datadog,      ats: greenhouse, slug: datadog,     regions: [global]}
+- {name: GitLab,       ats: greenhouse, slug: gitlab,      regions: [global]}
+- {name: Discord,      ats: greenhouse, slug: discord,     regions: [global]}
+- {name: Robinhood,    ats: greenhouse, slug: robinhood,   regions: [global]}
+- {name: Coinbase,     ats: greenhouse, slug: coinbase,    regions: [global]}
+- {name: Instacart,    ats: greenhouse, slug: instacart,   regions: [global]}
+- {name: Affirm,       ats: greenhouse, slug: affirm,      regions: [global]}
+- {name: Asana,        ats: greenhouse, slug: asana,       regions: [global]}
+- {name: Dropbox,      ats: greenhouse, slug: dropbox,     regions: [global]}
+- {name: Pinterest,    ats: greenhouse, slug: pinterest,   regions: [global]}
+- {name: Reddit,       ats: greenhouse, slug: reddit,      regions: [global]}
+- {name: Brex,         ats: greenhouse, slug: brex,        regions: [global]}
+- {name: Gusto,        ats: greenhouse, slug: gusto,       regions: [global]}
+- {name: Airbnb,       ats: greenhouse, slug: airbnb,      regions: [global]}
+- {name: Lyft,         ats: greenhouse, slug: lyft,        regions: [global]}
+- {name: PhonePe,      ats: greenhouse, slug: phonepe,     regions: [in]}
+- {name: Groww,        ats: greenhouse, slug: groww,       regions: [in]}
+- {name: N26,          ats: greenhouse, slug: n26,         regions: [de, global]}
+- {name: Celonis,      ats: greenhouse, slug: celonis,     regions: [de, global]}
+- {name: HelloFresh,   ats: greenhouse, slug: helloFresh,  regions: [de, global]}
+- {name: Vay,          ats: greenhouse, slug: vay,         regions: [de]}
+- {name: Wise,         ats: greenhouse, slug: wise,        regions: [global]}
+- {name: Remote,       ats: greenhouse, slug: remote,      regions: [global]}
+- {name: Monzo,        ats: greenhouse, slug: monzo,       regions: [global]}
+- {name: Algolia,      ats: greenhouse, slug: algolia,     regions: [global]}
+- {name: Flexport,     ats: greenhouse, slug: flexport,    regions: [global]}
+- {name: Faire,        ats: greenhouse, slug: faire,       regions: [global]}
+- {name: Earnin,       ats: greenhouse, slug: earnin,      regions: [global]}
+- {name: Samsara,      ats: greenhouse, slug: samsara,     regions: [global]}
+
+# --- Lever (api.lever.co) ------------------------------------------------
+- {name: Spotify,      ats: lever, slug: spotify,     regions: [global]}
+- {name: Palantir,     ats: lever, slug: palantir,    regions: [global]}
+- {name: AngelList,    ats: lever, slug: angellist,   regions: [global]}
+- {name: Ro,           ats: lever, slug: ro,          regions: [global]}
+- {name: Wealthfront,  ats: lever, slug: wealthfront, regions: [global]}
+
+# --- Ashby (api.ashbyhq.com) --------------------------------------------
+- {name: Ramp,         ats: ashby, slug: ramp,      regions: [global]}
+- {name: Notion,       ats: ashby, slug: notion,    regions: [global]}
+- {name: Linear,       ats: ashby, slug: linear,    regions: [global]}
+- {name: Replit,       ats: ashby, slug: replit,    regions: [global]}
+- {name: Vanta,        ats: ashby, slug: vanta,     regions: [global]}
+- {name: OpenAI,       ats: ashby, slug: openai,    regions: [global]}
+- {name: Hightouch,    ats: ashby, slug: hightouch, regions: [global]}
+- {name: Rewst,        ats: ashby, slug: rewst,     regions: [global]}
+- {name: Temporal,     ats: ashby, slug: temporal,  regions: [global]}
+- {name: Anrok,        ats: ashby, slug: anrok,     regions: [global]}
+
+# --- SmartRecruiters (api.smartrecruiters.com) --------------------------
+- {name: Sixt,          ats: smartrecruiters, slug: Sixt,          regions: [de, global]}
+- {name: Delivery Hero, ats: smartrecruiters, slug: DeliveryHero1, regions: [de, global]}
+- {name: Auto1,         ats: smartrecruiters, slug: Auto1,         regions: [de]}
+
+# --- Workable (apply.workable.com) --------------------------------------
+- {name: Hugging Face, ats: workable, slug: huggingface, regions: [global]}
+
+# --- Recruitee (*.recruitee.com) ----------------------------------------
+- {name: Helloprint,   ats: recruitee, slug: helloprint, regions: [global]}
+
+# --- Personio (*.jobs.personio.de) --------------------------------------
+- {name: Medwing,      ats: personio, slug: medwing,     regions: [de]}
+- {name: Clark,        ats: personio, slug: clark,       regions: [de]}
+- {name: HomeToGo,     ats: personio, slug: hometogo,    regions: [de]}
+- {name: Userlane,     ats: personio, slug: userlane,    regions: [de]}
+- {name: Smava,        ats: personio, slug: smava,       regions: [de]}
+- {name: Jodel,        ats: personio, slug: jodel,       regions: [de]}
+- {name: Kiwigrid,     ats: personio, slug: kiwigrid,    regions: [de]}
+
+# --- Workday (POST, tenant URLs vary — wd_host/site required) ----------
+# IBM and SAP were explicitly requested but their Workday tenant/site could
+# not be determined within the verification window (guesses returned 422
+# "no such site"; both companies' public careers pages render entirely via
+# client-side JS with no static reference to the API path). Accenture's
+# tenant WAS found and verified live (2000 total postings at check time).
+- {name: Accenture, ats: workday, slug: accenture, wd_host: wd103, site: AccentureCareers, regions: [global, in]}
