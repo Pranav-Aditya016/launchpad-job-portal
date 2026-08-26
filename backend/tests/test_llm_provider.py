@@ -11,16 +11,24 @@ import pytest
 from app import llm
 
 
-def test_provider_prefers_api_when_key_present(monkeypatch):
+# POLICY CHANGE (v2): auto-selection resolves to the LOCAL model, always.
+# These two tests previously pinned v1's "use whatever is available" order —
+# API key first, then the Claude CLI, then Ollama. That meant any machine with
+# `claude` on PATH silently sent every evaluation to Anthropic while the local
+# GPU sat idle. v2 requires cloud to be opted into explicitly. The tests below
+# now pin the new policy; see test_local_only_default.py for the full contract.
+
+def test_a_stray_api_key_does_not_silently_select_the_cloud(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
-    assert llm.provider() == "api"
+    assert llm.provider() == "ollama"
 
 
-def test_provider_falls_back_to_cli_without_key(monkeypatch):
+def test_an_installed_claude_cli_does_not_silently_select_the_cloud(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
-    assert llm.provider() == "cli"
+    monkeypatch.setattr(llm, "claude_cli_path", lambda: "/usr/bin/claude")
+    assert llm.provider() == "ollama"
 
 
 def test_provider_explicit_override_wins(monkeypatch):

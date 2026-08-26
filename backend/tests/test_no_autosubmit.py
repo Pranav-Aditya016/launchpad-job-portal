@@ -11,31 +11,101 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "app"
 
-# Patterns that would indicate automated submission. Written to catch intent
-# (a click aimed at a submit control) rather than every possible `.click()`,
-# which has legitimate uses like dismissing a cookie banner.
-FORBIDDEN = [
-    re.compile(r"""click\(\s*['"][^'"]*submit""", re.I),
-    re.compile(r"""click\(\s*['"][^'"]*apply-now""", re.I),
-    re.compile(r"""(auto_?submit|submit_application|click_submit|do_apply)""", re.I),
-    re.compile(r"""get_by_role\(\s*['"]button['"][^)]*name\s*=\s*['"][^'"]*submit""", re.I),
-    re.compile(r"""press\(\s*['"]Enter['"]\s*\)\s*#\s*submit""", re.I),
-]
+# A string that names a submit control. Applied only to string LITERALS that
+# reach a click, never to prose.
+SUBMITISH = re.compile(r"(type=[\"']?submit|button\[type|apply-now|\bsubmit\b)", re.I)
+
+# Identifiers that name a submit routine. Applied only to DECLARED names and
+# attribute accesses, never to comments or docstrings.
+SUBMIT_NAMES = re.compile(r"^(auto_?submit|submit_application|click_submit|do_apply)$", re.I)
+
+# The methods that actually actuate a control.
+ACTUATORS = {"click", "press", "dispatch_event", "tap"}
+
+
+def _string_constants(node: ast.AST) -> list[str]:
+    return [n.value for n in ast.walk(node)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+def _submit_offenders(tree: ast.AST) -> list[tuple[str, int]]:
+    """Automated-submission intent, found structurally rather than textually.
+
+    An AST walk, for the same reason the credential check is one: a regex over
+    raw source cannot tell code from prose. The previous regex version flagged
+    `app/browser/__init__.py` because its DOCSTRING mentioned this test's own
+    filename — "test_no_autosubmit.py" contains "autosubmit". A guard that cries
+    wolf at documentation is a guard people delete.
+
+    Two shapes are caught:
+      1. an actuator call (`.click()`, `.press()`, …) where a submit-naming
+         string literal appears in its arguments OR anywhere in the receiver
+         chain — so `page.get_by_role("button", name="Submit").click()` and
+         `page.locator("button[type=submit]").click()` are both caught, not just
+         the direct `page.click("…submit…")` form;
+      2. a declared or accessed identifier that names a submit routine.
+    """
+    out: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr in ACTUATORS:
+                haystack = _string_constants(node.func.value)
+                for a in node.args:
+                    haystack += _string_constants(a)
+                for kw in node.keywords:
+                    haystack += _string_constants(kw.value)
+                for s in haystack:
+                    if SUBMITISH.search(s):
+                        out.append((f"{node.func.attr}(...{s[:40]}...)", node.lineno))
+                        break
+        name = None
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            name = node.name
+        elif isinstance(node, ast.Attribute):
+            name = node.attr
+        elif isinstance(node, ast.Name):
+            name = node.id
+        if name and SUBMIT_NAMES.match(name):
+            out.append((name, node.lineno))
+    return out
 
 
 def test_no_submit_automation_anywhere_in_the_backend():
     offenders = []
     for path in APP.rglob("*.py"):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for pattern in FORBIDDEN:
-            for match in pattern.finditer(text):
-                line = text[: match.start()].count("\n") + 1
-                offenders.append(f"{path.relative_to(APP.parent)}:{line}: {match.group(0)!r}")
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        for what, line in _submit_offenders(tree):
+            offenders.append(f"{path.relative_to(APP.parent)}:{line}: {what!r}")
     assert not offenders, (
         "Automated submission code detected — this violates a hard product "
         "boundary (spec §2). Remove it; do not relax this test.\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_the_submit_guard_catches_real_violations_but_not_prose():
+    """A guard never checked against a real violation is not a guard — and one
+    that fires on documentation gets deleted by the next frustrated engineer."""
+    caught = [
+        'async def f(page):\n    await page.click("button[type=submit]")\n',
+        'async def f(page):\n    await page.locator("button[type=submit]").click()\n',
+        'async def f(page):\n    await page.get_by_role("button", name="Submit").click()\n',
+        'def submit_application(page):\n    pass\n',
+        'async def f(page):\n    sel = "x"\n    await page.click("input.apply-now")\n',
+    ]
+    for src in caught:
+        assert _submit_offenders(ast.parse(src)), f"guard MISSED a violation:\n{src}"
+
+    ignored = [
+        # the exact false positive that broke the build
+        '"""See backend/tests/test_no_autosubmit.py for the boundary."""\n',
+        '# we never auto_submit anything\nx = 1\n',
+        'def f(page):\n    """Never clicks submit."""\n    page.click("#cookie-accept")\n',
+        'STATE = "submitted"   # the USER told us they submitted\n',
+        'def mark_submitted(job_id):\n    pass\n',
+    ]
+    for src in ignored:
+        assert not _submit_offenders(ast.parse(src)), f"guard FALSE-POSITIVED on:\n{src}"
 
 
 def _credential_identifiers(tree: ast.AST) -> list[tuple[str, int]]:

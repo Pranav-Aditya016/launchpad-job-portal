@@ -147,18 +147,33 @@ def test_put_profile_saves_without_llm(tmp_path, monkeypatch):
 
 
 def test_config_reports_capabilities(monkeypatch):
-    """With no API key the app is still LLM-capable via the Claude Code CLI
-    (subscription auth), so /config must report the provider, not just a key."""
+    """/config must report the provider, not just whether a key exists.
+
+    POLICY CHANGE (v2): auto-selection is LOCAL, so with nothing set this is
+    `ollama` even on a machine with the Claude CLI installed — see
+    test_local_only_default.py. The response shape is unchanged.
+    """
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LAUNCHPAD_LLM", raising=False)
     monkeypatch.setattr(api.llm, "claude_cli_path", lambda: "/usr/bin/claude")
+    monkeypatch.setattr(api.llm, "ollama_available", lambda: True)
     body = TestClient(api.app).get("/config").json()
-    assert body["llm_provider"] == "cli"
+    assert body["llm_provider"] == "ollama"
     assert body["llm_available"] is True
     assert set(body) == {
         "llm_available", "llm_provider", "llm_model",
         "pdf_available", "adzuna_available",
     }
+
+
+def test_config_reports_the_cli_when_it_is_explicitly_opted_into(monkeypatch):
+    """The subscription path still works — it just has to be asked for."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("LAUNCHPAD_LLM", "cli")
+    monkeypatch.setattr(api.llm, "claude_cli_path", lambda: "/usr/bin/claude")
+    body = TestClient(api.app).get("/config").json()
+    assert body["llm_provider"] == "cli"
+    assert body["llm_available"] is True
 
 
 def test_config_falls_back_to_local_ollama_with_no_key_and_no_cli(monkeypatch):

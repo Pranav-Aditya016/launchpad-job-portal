@@ -91,14 +91,21 @@ def ollama_available() -> bool:
 
 
 def provider() -> str:
-    """Which backend a call will use right now: 'api', 'cli' or 'ollama'."""
-    choice = (os.environ.get("LAUNCHPAD_LLM") or "auto").lower()
+    """Which backend a call will use right now: 'api', 'cli' or 'ollama'.
+
+    **Local is the default. Cloud is opt-in, never a fallback.**
+
+    v1 picked whatever was available — API key first, then the Claude Code CLI,
+    then Ollama. On any machine with `claude` on PATH that meant a normal start
+    silently sent every evaluation to Anthropic while the local GPU sat idle.
+    v2 inverts it: `auto` (and anything unrecognised) resolves to `ollama`, and
+    reaching a cloud provider requires LAUNCHPAD_LLM=api|cli explicitly.
+
+    Failing safe here means failing toward the free, offline, private path.
+    """
+    choice = (os.environ.get("LAUNCHPAD_LLM") or "").strip().lower()
     if choice in ("api", "cli", "ollama"):
         return choice
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return "api"
-    if claude_cli_path():
-        return "cli"
     return "ollama"
 
 
