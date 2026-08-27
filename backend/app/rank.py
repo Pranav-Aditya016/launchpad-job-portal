@@ -64,14 +64,35 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return llm.embed(texts)
 
 
+def _dominant_dim(cache: dict) -> int:
+    """The vector length most entries agree on — the current model's.
+
+    Taking the majority rather than the first entry means one poisoned record
+    cannot evict a whole valid cache.
+    """
+    counts: dict[int, int] = {}
+    for v in cache.values():
+        if isinstance(v, list) and v:
+            counts[len(v)] = counts.get(len(v), 0) + 1
+    return max(counts, key=counts.get) if counts else 0
+
+
 def rank_jobs(profile, jobs: list) -> list[tuple[object, float]]:
     """[(job, similarity)] best first. Never raises."""
     if not jobs:
         return []
 
     cache = store.load_embeddings()
-    wanted: dict[str, str] = {}
 
+    # Drop anything whose dimension no longer matches the current model, so a
+    # model swap (or a stray write) costs one re-embed instead of scoring every
+    # job 0.0 forever. Cosine already refuses mismatched lengths; without this
+    # it would refuse them on every future run too.
+    dims = _dominant_dim(cache)
+    if dims:
+        cache = {k: v for k, v in cache.items() if isinstance(v, list) and len(v) == dims}
+
+    wanted: dict[str, str] = {}
     if _PROFILE_CACHE_KEY not in cache:
         wanted[_PROFILE_CACHE_KEY] = profile_text(profile)
     for j in jobs:

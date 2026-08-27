@@ -19,6 +19,21 @@ from app import rank
 from app.models import Job, Profile
 
 
+@pytest.fixture(autouse=True)
+def never_touch_real_data(tmp_path, monkeypatch):
+    """Point the store at a scratch dir for EVERY test in this file.
+
+    Two tests here previously ranked without redirecting DATA_DIR, so their
+    fake 2-dimensional vectors were written into the user's real
+    `launchpad_data/embeddings.json`. Cosine then correctly refused to compare
+    2 dims against the model's 768 and scored every job 0.0 — the live ranking
+    was silently useless until the cache was cleared. Tests do not get to write
+    to real user data.
+    """
+    from app import config as cfg
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+
+
 def _job(jid, title, desc="", company="Acme"):
     return Job(id=jid, source="t", company=company, title=title,
                url=f"https://x.invalid/{jid}", description=desc)
