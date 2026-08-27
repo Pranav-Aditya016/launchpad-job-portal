@@ -8,8 +8,8 @@ background watcher only *looks* at the page (polls for `logged_in_selector`);
 it never types into it. There is no field for a credential anywhere below.
 
 Hardware budgets (spec §12.3) — not optional on an 8 GB-VRAM laptop:
-  - at most 2 concurrent HEADLESS Chromium contexts (`_HEADLESS_SEM`)
-  - exactly 1 HEADED window at a time (`_HEADED_SEM`), used for a login or an
+  - at most 2 concurrent HEADLESS Chromium contexts
+  - exactly 1 HEADED window at a time, used for a login or an
     apply-prepare (Track D)
   - every context this module opens is closed in a `finally`
   - a stale profile lock (left behind by a hard shutdown) is cleared before
@@ -36,8 +36,41 @@ from app.sources.base import SourceKind, SourceMeta, SourceUnavailable
 
 # --- hardware budgets (spec §12.3) -----------------------------------------
 
-_HEADLESS_SEM = asyncio.Semaphore(2)
-_HEADED_SEM = asyncio.Semaphore(1)
+# Concurrency caps (spec §12.3), kept PER EVENT LOOP.
+#
+# A module-level asyncio.Semaphore is bound to whichever loop first awaited it.
+# Reusing one across loops is undefined behaviour, and it deadlocked the test
+# suite for real: pytest-asyncio gives each test a fresh loop, a fire-and-forget
+# login task from one test was destroyed with the loop while still holding the
+# headed slot, and the next test blocked forever acquiring it. Keying by the
+# running loop makes each loop's limits independent and self-healing.
+MAX_HEADLESS = 2
+MAX_HEADED = 1
+
+_SEMS: dict[int, dict[str, asyncio.Semaphore]] = {}
+
+
+def _sems() -> dict[str, asyncio.Semaphore]:
+    loop = asyncio.get_running_loop()
+    got = _SEMS.get(id(loop))
+    if got is None:
+        got = {
+            "headless": asyncio.Semaphore(MAX_HEADLESS),
+            "headed": asyncio.Semaphore(MAX_HEADED),
+        }
+        _SEMS[id(loop)] = got
+    return got
+
+
+async def drain_background_tasks(timeout: float = 10.0) -> None:
+    """Await the fire-and-forget login watchers.
+
+    Tests need this: without it a watcher outlives its event loop, its
+    `finally` never runs, and the slot it holds is never given back.
+    """
+    pending = [t for t in _background_tasks if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=timeout)
 
 # --- timings -----------------------------------------------------------
 
@@ -162,7 +195,7 @@ async def _run_login_window(portal: str, meta: SourceMeta) -> None:
     crashing an unattended scheduler loop (spec §7).
     """
     user_data_dir = _sessions_dir(portal)
-    async with _HEADED_SEM:
+    async with _sems()["headed"]:
         _clear_stale_lock(user_data_dir)
         pw = context = None
         try:
@@ -215,13 +248,13 @@ async def verify(portal: str) -> Connection:
     if not user_data_dir.exists():
         return _save(portal, status="disconnected", note="not connected yet — use Login to sign in")
 
-    await _HEADLESS_SEM.acquire()
+    await _sems()["headless"].acquire()
     try:
         return await _verify_inner(portal, meta, user_data_dir)
     except Exception as e:
         return _save(portal, status="expired", note=f"verify failed: {e}"[:300])
     finally:
-        _HEADLESS_SEM.release()
+        _sems()["headless"].release()
 
 
 async def _verify_inner(portal: str, meta: SourceMeta, user_data_dir: Path) -> Connection:
@@ -297,13 +330,13 @@ async def open_page(portal: str):
                 f"{portal}: no browser session — connect via POST /connections/{portal}/login first"
             )
 
-        await _HEADLESS_SEM.acquire()
+        await _sems()["headless"].acquire()
         try:
             _clear_stale_lock(user_data_dir)
             pw, context = await _open_context(user_data_dir, headless=True)
             page = await context.new_page()
         except Exception as e:
-            _HEADLESS_SEM.release()
+            _sems()["headless"].release()
             raise SourceUnavailable(f"{portal}: could not open browser session ({e})") from e
 
         _open_contexts[portal] = {"pw": pw, "context": context, "page": page}
@@ -316,7 +349,7 @@ async def close_page(portal: str) -> None:
     if entry is None:
         return
     await _close_context(entry["pw"], entry["context"])
-    _HEADLESS_SEM.release()
+    _sems()["headless"].release()
 
 
 async def close_all_pages() -> None:

@@ -58,14 +58,29 @@ def tmp_data(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def clean_vault_state():
-    """Session state is module-level (semaphores, open contexts). Isolate it."""
+async def clean_vault_state():
+    """Isolate the module-level session state, and — critically — make sure no
+    background login watcher outlives this test's event loop.
+
+    `open_login_window` deliberately returns immediately and leaves a watcher
+    task holding a real Chromium. pytest-asyncio closes the loop after each
+    test, and closing a loop CANCELS surviving tasks and waits for them. A task
+    parked inside Playwright's Windows IOCP poll does not answer cancellation,
+    so the whole suite hangs in loop teardown — not in any test, which is why
+    it showed up as "test_session_vault stops at 78%" with no failing name.
+
+    Draining here rather than in each test means a future test cannot
+    reintroduce the hang by forgetting to.
+    """
     session._open_contexts.clear()
     yield
-    session._open_contexts.clear()
-    # Reset semaphores in case a test left one held after a failure.
-    session._HEADLESS_SEM = asyncio.Semaphore(2)
-    session._HEADED_SEM = asyncio.Semaphore(1)
+    try:
+        await session.drain_background_tasks(timeout=15.0)
+    finally:
+        await session.close_all_pages()
+        session._open_contexts.clear()
+        # Per-loop now (see session._sems); this just stops the dict growing.
+        session._SEMS.clear()
 
 
 @pytest.fixture
@@ -129,6 +144,7 @@ async def test_verify_detects_a_live_session(registered_portal):
     (cfg.DATA_DIR / "sessions" / portal).mkdir(parents=True)
     conn = await session.verify(portal)
     assert conn.status == "connected"
+    await session.drain_background_tasks()
     assert conn.last_verified is not None
 
 
@@ -163,9 +179,9 @@ async def test_verify_releases_the_headless_semaphore_even_on_failure(registered
         raise RuntimeError("boom")
 
     monkeypatch.setattr(session, "_open_context", _boom)
-    before = session._HEADLESS_SEM._value
+    before = session._sems()["headless"]._value
     await session.verify(portal)
-    assert session._HEADLESS_SEM._value == before
+    assert session._sems()["headless"]._value == before
 
 
 # --- concurrency limits (spec §12.3) -----------------------------------------
@@ -327,6 +343,7 @@ async def test_login_window_times_out_when_marker_never_appears(registered_porta
 
     assert conn.status == "disconnected"
     assert "time" in conn.note.lower() or "closed" in conn.note.lower()
+    await session.drain_background_tasks()
 
 
 # --- disconnect --------------------------------------------------------------
@@ -366,9 +383,9 @@ async def test_open_page_reuses_one_context_per_portal(registered_portal):
 async def test_close_all_pages_releases_the_headless_semaphore(registered_portal):
     portal, _server = registered_portal
     (cfg.DATA_DIR / "sessions" / portal).mkdir(parents=True)
-    before = session._HEADLESS_SEM._value
+    before = session._sems()["headless"]._value
     await session.open_page(portal)
-    assert session._HEADLESS_SEM._value == before - 1
+    assert session._sems()["headless"]._value == before - 1
     await session.close_all_pages()
-    assert session._HEADLESS_SEM._value == before
+    assert session._sems()["headless"]._value == before
     assert session._open_contexts == {}

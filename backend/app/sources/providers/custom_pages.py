@@ -90,8 +90,16 @@ class CustomPagesSource:
     )
 
     async def fetch(self, ctx: FetchContext) -> list[Job]:
-        sites = [s for s in cs.load_all() if s.enabled]
+        all_sites = cs.load_all()
+        sites = [s for s in all_sites if s.enabled]
         if not sites:
+            # Say WHICH nothing this is — "no postings" and "you haven't added
+            # any sites yet" are different facts and only one is actionable.
+            ctx.warn(
+                "no websites added yet — add one from the Sources page to scrape it"
+                if not all_sites else
+                f"all {len(all_sites)} of your websites are switched off"
+            )
             return []
 
         jobs: list[Job] = []

@@ -1,16 +1,20 @@
-"""Single LLM call site, with two interchangeable providers.
+"""Single LLM call site, with three interchangeable providers.
 
-- **cli** (default when no API key): shells out to the Claude Code CLI in headless
-  print mode (`claude -p`). This authenticates with the user's Claude Pro/Max
-  subscription, so it needs no API key and consumes no API credits. It is the
-  pattern career-ops documents for its own batch workers ("headless CLI workers:
-  `claude -p` / `opencode run`"), and it is subject to the subscription's own
-  rate limits rather than API billing.
-- **api**: the Anthropic SDK with `ANTHROPIC_API_KEY`. Faster and parallel-friendly,
-  but requires credit on the API account (a Pro subscription does NOT fund it).
+**Local is the default and cloud is opt-in** — see `provider()`. LaunchPad is
+meant to run entirely on the user's own machine, so nothing here reaches the
+network unless the user explicitly asks it to.
 
-Select explicitly with `LAUNCHPAD_LLM=cli|api`; the default (`auto`) prefers the
-API when a key is present and otherwise falls back to the CLI.
+- **ollama** (default): the local model. Free, offline, private, no rate limits.
+- **cli**: the Claude Code CLI in headless print mode (`claude -p`), which
+  authenticates with a Claude Pro/Max subscription rather than API credits.
+  Opt in with `LAUNCHPAD_LLM=cli`.
+- **api**: the Anthropic SDK with `ANTHROPIC_API_KEY`. Opt in with
+  `LAUNCHPAD_LLM=api`. The `anthropic` package is an optional extra
+  (`pip install -e "backend[hosted]"`), so a default install has no cloud SDK.
+
+Embeddings (`embed`) are always local regardless of provider: one vector per
+job, ~850 per scan, and shipping every posting someone looks at to a third
+party would be a needless privacy leak for a job hunt.
 """
 
 import json
@@ -202,6 +206,50 @@ def _complete_json_ollama(system: str, user: str, max_tokens: int) -> dict:
     if not content:
         raise RuntimeError(f"Local model {OLLAMA_MODEL} returned empty output")
     return json.loads(content)
+
+
+# Embeddings are always local: they are cheap, high-volume (one per job, ~850
+# per scan), and sending every posting the user looks at to a third party would
+# be a needless privacy leak for a job hunt.
+OLLAMA_EMBED_MODEL = os.environ.get("LAUNCHPAD_EMBED_MODEL", "nomic-embed-text")
+
+# One request per batch; large batches are where the time is saved.
+EMBED_BATCH = 64
+
+
+def embed(texts: list[str]) -> list[list[float]]:
+    """Embedding vectors for `texts`, via Ollama.
+
+    Raises RuntimeError with an actionable message if the model isn't pulled —
+    callers treat that as "skip ranking", never as a failed scan.
+    """
+    import httpx
+
+    if not texts:
+        return []
+    out: list[list[float]] = []
+    for i in range(0, len(texts), EMBED_BATCH):
+        batch = texts[i : i + EMBED_BATCH]
+        try:
+            r = httpx.post(
+                f"{OLLAMA_HOST}/api/embed",
+                json={"model": OLLAMA_EMBED_MODEL, "input": batch},
+                timeout=180,
+            )
+            r.raise_for_status()
+        except Exception as exc:
+            raise RuntimeError(
+                f"embedding failed via Ollama at {OLLAMA_HOST} "
+                f"(model={OLLAMA_EMBED_MODEL}): {type(exc).__name__}: {str(exc)[:160]}. "
+                f"Run `ollama pull {OLLAMA_EMBED_MODEL}`."
+            ) from exc
+        vectors = r.json().get("embeddings") or []
+        if len(vectors) != len(batch):
+            raise RuntimeError(
+                f"embedding returned {len(vectors)} vectors for {len(batch)} inputs"
+            )
+        out.extend(vectors)
+    return out
 
 
 def require_json_keys(d: object, required: tuple[str, ...], what: str) -> dict:

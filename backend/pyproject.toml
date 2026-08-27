@@ -11,7 +11,7 @@ dependencies = [
   "apscheduler>=3.11", "sse-starlette>=3.3", "playwright>=1.62", "numpy>=2.0",
 ]
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-timeout>=2.3"]
 # Opt-in cloud provider. NOT required: the product's default path is fully local
 # via Ollama. app/llm.py imports anthropic lazily so its absence is never fatal.
 hosted = ["anthropic>=0.39"]
@@ -21,6 +21,11 @@ agentic = ["browser-use>=0.2"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+# A hung test must fail with a NAME. Without this, a background task blocked in
+# Playwright's Windows IOCP poll hung the whole suite in event-loop teardown and
+# reported nothing at all — just a run that stopped at 78%.
+timeout = 120
+timeout_method = "thread"
 markers = [
   "integration: opt-in tests that spawn Node and hit live network (RUN_INTEGRATION=1 to run)",
 ]

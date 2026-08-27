@@ -13,7 +13,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app import scan_engine, store
+from app import evaluate_pipeline, scan_engine, store
 from app.models import Profile
 
 router = APIRouter()
@@ -106,6 +106,41 @@ async def run_now(body: RunNowRequest = RunNowRequest()):
         "results": [r.model_dump() for r in run.results],
         "warnings": run.warnings,
     }
+
+
+class EvaluateNextRequest(BaseModel):
+    budget: int | None = None          # None = the default per-cycle budget
+    min_similarity: float = 0.0
+
+
+@router.post("/scan/evaluate-next")
+async def evaluate_next(body: EvaluateNextRequest = EvaluateNextRequest()):
+    """Evaluate the most promising unscored jobs, cheapest-first.
+
+    With ~850 jobs in the store and 10-30s per local evaluation, scoring
+    everything is about three hours of pinned GPU. This ranks every unscored
+    job by embedding similarity (~50ms each) and spends the rubric only on the
+    top `budget` (spec §4.2).
+    """
+    profile = store.load_profile()
+    if profile is None:
+        raise HTTPException(400, "No profile found. Upload a resume first.")
+    return await evaluate_pipeline.evaluate_next(
+        profile, budget=body.budget, min_similarity=body.min_similarity
+    )
+
+
+@router.get("/scan/ranking")
+def ranking(limit: int = 50):
+    """The pre-ranked queue: what the model would read next, and why.
+
+    Transparency for the funnel itself — otherwise "why hasn't it scored this
+    job yet?" has no visible answer.
+    """
+    profile = store.load_profile()
+    if profile is None:
+        raise HTTPException(400, "No profile found. Upload a resume first.")
+    return evaluate_pipeline.ranking_preview(profile, limit=limit)
 
 
 @router.get("/scan/coverage")
