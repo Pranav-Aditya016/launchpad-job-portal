@@ -1,5 +1,6 @@
 "use client";
 
+import type { RunNowResponse } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -9,7 +10,7 @@ import {
   getJobs,
   getProfile,
   getSources,
-  scan,
+  runNow,
   type CustomSite,
   type Job,
   type Profile,
@@ -52,6 +53,7 @@ export default function DashboardPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanWarnings, setScanWarnings] = useState<string[]>([]);
+  const [lastRun, setLastRun] = useState<RunNowResponse | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -165,8 +167,23 @@ export default function DashboardPage() {
     setStatusMessage("Scanning your sources — this can take a minute or two…");
     startTimer();
     try {
-      const res = await scan({ since_days: sinceDays, fresher_only: fresherOnly, crawl_curated: crawlCurated });
-      setStatusMessage(`Added ${res.added} new job${res.added === 1 ? "" : "s"} — ${res.total} total.`);
+      // The registry-driven engine: every enabled source, your own added
+      // websites, and any portal you've connected. The old /scan endpoint only
+      // ran the handful of v1 aggregators, which is why this button used to sit
+      // there for a minute and come back with nothing new.
+      const res = await runNow({});
+      const ok = res.results.filter((r) => r.status === "ok").length;
+      const silent = res.results.filter(
+        (r) => r.status === "empty" || r.status === "error",
+      ).length;
+      const needLogin = res.results.filter((r) => r.status === "needs_login").length;
+      setLastRun(res);
+      setStatusMessage(
+        `Found ${res.jobs_found} job${res.jobs_found === 1 ? "" : "s"} · ` +
+          `${res.jobs_new} new · ${ok}/${res.sources_considered} sources returned jobs` +
+          (silent ? ` · ${silent} silent` : "") +
+          (needLogin ? ` · ${needLogin} need a login` : ""),
+      );
       setScanWarnings(res.warnings ?? []);
       await loadJobs();
     } catch (e) {
@@ -289,6 +306,71 @@ export default function DashboardPage() {
 
         {/* Calm, non-alarming: the scan still succeeded overall — these are
             just the sources that didn't respond this time. */}
+        {/* Per-source result of the last scan — the honest answer to
+            "which sites did you actually just look at, and what did each give
+            me?" Shown right where the scan happened, not buried on another
+            page. */}
+        {lastRun && (
+          <div className="glass overflow-hidden">
+            <div className="glass-scrim px-4 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-medium text-foreground">
+                  Last scan · {lastRun.jobs_found} found, {lastRun.jobs_new} new
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setLastRun(null)}
+                  className="text-caption text-muted underline underline-offset-2 hover:text-foreground"
+                >
+                  Hide
+                </button>
+              </div>
+              <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                {[...lastRun.results]
+                  .sort((a, b) => b.jobs_found - a.jobs_found)
+                  .map((r) => (
+                    <li key={r.key} className="flex items-center gap-2 text-caption">
+                      <span
+                        aria-hidden
+                        className={
+                          "inline-block h-2 w-2 shrink-0 rounded-full " +
+                          (r.status === "ok"
+                            ? "bg-success"
+                            : r.status === "error"
+                              ? "bg-danger"
+                              : r.status === "needs_login"
+                                ? "bg-accent"
+                                : "bg-muted/50")
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate text-foreground/80">
+                        {r.label}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        {r.status === "ok"
+                          ? `${r.jobs_found}`
+                          : r.status === "needs_login"
+                            ? "log in"
+                            : r.status === "disabled"
+                              ? "off"
+                              : r.status === "error"
+                                ? "error"
+                                : "0"}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-2 text-caption text-muted">
+                Portals marked “log in” are skipped until you connect them on the{" "}
+                <a className="underline underline-offset-2" href="/connections">
+                  Connections
+                </a>{" "}
+                page.
+              </p>
+            </div>
+          </div>
+        )}
+
         {scanWarnings.length > 0 && (
           <div className="rounded-xl bg-surface-2 px-4 py-3 text-body text-muted">
             <p className="font-medium text-foreground/80">
