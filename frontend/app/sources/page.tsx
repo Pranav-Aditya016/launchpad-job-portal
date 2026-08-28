@@ -115,8 +115,15 @@ export default function SourcesPage() {
     };
   }, [sources, customSites]);
 
+  const connectedCustomCount = useMemo(
+    () => (customSites ?? []).filter((s) => s.enabled).length,
+    [customSites]
+  );
+
   const kinds = useMemo(() => {
-    const present = new Set((sources ?? []).map((s) => s.kind));
+    const present = new Set(
+      (sources ?? []).filter((s) => s.key !== "custom:pages").map((s) => s.kind)
+    );
     return KIND_ORDER.filter((k) => present.has(k));
   }, [sources]);
 
@@ -130,6 +137,10 @@ export default function SourcesPage() {
     if (!sources) return [];
     const q = search.trim().toLowerCase();
     return sources.filter((s) => {
+      // Superseded by the per-site cards in "Your websites" above — showing
+      // it again here as a lone "registered source" duplicates that section
+      // with a confusing merged status instead of clarifying anything.
+      if (s.key === "custom:pages") return false;
       if (kindFilter !== "all" && s.kind !== kindFilter) return false;
       if (regionFilter !== "all" && !s.regions.includes(regionFilter)) return false;
       if (q && !s.label.toLowerCase().includes(q) && !s.key.toLowerCase().includes(q)) return false;
@@ -356,25 +367,41 @@ export default function SourcesPage() {
         {/* ---------------- Your websites ---------------- */}
         {customSites && customSites.length > 0 && (
           <section className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <h2 className="font-display text-headline">Your websites</h2>
               <Badge tone="neutral">{customSites.length}</Badge>
+              <span className="text-caption font-medium text-muted">
+                {connectedCustomCount} of {customSites.length} connected
+              </span>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {customSites.map((site) => (
                 <GlassCard key={site.id} innerClassName="flex flex-col gap-3" hover>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-display text-headline truncate">{site.label}</p>
-                      <p className="text-caption text-muted truncate">{site.url}</p>
-                    </div>
-                    <Toggle
-                      checked={site.enabled}
-                      onChange={(v) => handleCustomToggle(site, v)}
-                      label=""
-                      ariaLabel={`${site.enabled ? "Disable" : "Enable"} ${site.label}`}
-                    />
+                  <div className="min-w-0">
+                    <p className="font-display text-headline truncate">{site.label}</p>
+                    <p className="text-caption text-muted truncate" title={site.url}>
+                      {site.url}
+                    </p>
                   </div>
+
+                  {/* Connection state — words + colour, never a bare switch. */}
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: site.enabled ? "var(--success)" : "var(--muted)" }}
+                    />
+                    <span
+                      className="text-caption font-semibold"
+                      style={{ color: site.enabled ? "var(--success)" : "var(--muted)" }}
+                    >
+                      {site.enabled ? "Connected" : "Disconnected"}
+                    </span>
+                    {pendingCustomIds.has(site.id) && (
+                      <span className="text-caption text-muted">· Saving…</span>
+                    )}
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-1.5">
                     <StatusBadge status={deriveCustomStatus(site)} />
                     {site.last_jobs > 0 && (
@@ -387,17 +414,28 @@ export default function SourcesPage() {
                         {r.toUpperCase()}
                       </Badge>
                     ))}
-                    {pendingCustomIds.has(site.id) && (
-                      <span className="text-caption text-muted">Saving…</span>
-                    )}
                   </div>
                   {site.last_detail && (
                     <p className="text-caption text-muted">{site.last_detail}</p>
                   )}
-                  <div className="mt-1">
+
+                  {/* Disconnect/Reconnect (reversible, routine) is kept
+                      visually apart from Remove (destructive, rare) — a
+                      divider, opposite alignment, and a filled danger
+                      button vs. a neutral secondary one. */}
+                  <div className="mt-1 flex items-center justify-between gap-2 border-t border-[color:var(--border)] pt-3">
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="secondary"
+                      disabled={pendingCustomIds.has(site.id)}
+                      onClick={() => handleCustomToggle(site, !site.enabled)}
+                    >
+                      {site.enabled ? "Disconnect" : "Reconnect"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      className="opacity-75 hover:opacity-100"
                       disabled={pendingCustomIds.has(site.id)}
                       onClick={() => handleCustomDelete(site)}
                     >
@@ -518,6 +556,22 @@ export default function SourcesPage() {
                         ariaLabel={`${source.enabled ? "Disable" : "Enable"} ${source.label}`}
                       />
                     </div>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: source.enabled ? "var(--success)" : "var(--muted)" }}
+                      />
+                      <span
+                        className="text-caption font-semibold"
+                        style={{ color: source.enabled ? "var(--success)" : "var(--muted)" }}
+                      >
+                        {source.enabled ? "Enabled" : "Disabled"}
+                      </span>
+                      {pendingKeys.has(source.key) && (
+                        <span className="text-caption text-muted">· Saving…</span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusBadge status={deriveSourceStatus(source)} />
                       {source.last && source.last.jobs_found > 0 && (
@@ -530,9 +584,6 @@ export default function SourcesPage() {
                           {r.toUpperCase()}
                         </Badge>
                       ))}
-                      {pendingKeys.has(source.key) && (
-                        <span className="text-caption text-muted">Saving…</span>
-                      )}
                     </div>
                     {source.requires_login && (
                       <Link

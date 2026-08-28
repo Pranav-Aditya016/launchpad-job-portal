@@ -13,8 +13,8 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       className="rounded-[var(--radius-card)] border-2 border-dashed border-[color:var(--border-strong)] p-1.5"
       style={{
         background: "var(--glass-bg)",
-        backdropFilter: "blur(var(--glass-blur)) saturate(160%)",
-        WebkitBackdropFilter: "blur(var(--glass-blur)) saturate(160%)",
+        backdropFilter: "blur(var(--glass-blur)) saturate(180%)",
+        WebkitBackdropFilter: "blur(var(--glass-blur)) saturate(180%)",
       }}
     >
       <div className="glass-scrim flex flex-col items-center gap-3 px-8 py-16 text-center">

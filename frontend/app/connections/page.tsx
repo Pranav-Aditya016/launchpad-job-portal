@@ -182,7 +182,7 @@ export default function ConnectionsPage() {
                         <span className="text-caption text-muted">{STATUS_LABEL[conn.status]}</span>
                       </div>
                     </div>
-                    <Badge tone={STATUS_TONE[conn.status]}>{conn.status}</Badge>
+                    <Badge tone={STATUS_TONE[conn.status]}>{STATUS_LABEL[conn.status]}</Badge>
                   </div>
 
                   {conn.login_url && (

@@ -12,12 +12,18 @@
   --muted: #6c6390;
 
   /* Glass. --glass-scrim sits UNDER text so contrast never depends on
-     whatever the aurora happens to be doing behind the panel. */
-  --glass-bg: rgba(255, 255, 255, 0.55);
-  --glass-scrim: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.72);
-  --glass-blur: 20px;
-  --glass-shadow: 0 8px 32px rgba(120, 90, 200, 0.18);
+     whatever the aurora happens to be doing behind the panel.
+     Alphas below are chosen against a computed worst case: --glass-scrim
+     composited (at its alpha) over each --aurora-* hue at full strength,
+     text-on-result contrast checked with WCAG relative luminance. See
+     .superpowers/glass-polish-report.md for the numbers. */
+  --glass-bg: rgba(255, 255, 255, 0.32);
+  --glass-scrim: rgba(255, 255, 255, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.85);
+  --glass-border-hover: rgba(255, 255, 255, 0.98);
+  --glass-blur: 26px;
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 8px 32px rgba(120, 90, 200, 0.18), 0 0 60px -14px rgba(139, 125, 255, 0.32);
 
   --accent: #7c5cff;
   --accent-strong: #5b3fd6;
@@ -39,7 +45,11 @@
      Deleting one fails silently and strips a component's surface. */
   --surface: rgba(255, 255, 255, 0.62);
   --surface-translucent: rgba(255, 255, 255, 0.55);
-  --surface-2: rgba(245, 240, 255, 0.72);
+  /* Near-opaque, not a "glass panel" token — this backs caption text (chips,
+     badges) sitting directly on the aurora with no scrim underneath. At the
+     old 0.72 alpha it fell to ~2.5–3.75:1 against saturated aurora hues,
+     below the 4.5:1 floor; solid removes the dependency on aurora entirely. */
+  --surface-2: rgba(245, 240, 255, 1);
   --border: rgba(124, 92, 255, 0.14);
   --border-strong: rgba(124, 92, 255, 0.26);
   --shadow-card: 0 4px 14px rgba(120, 90, 200, 0.10), 0 12px 34px -14px rgba(120, 90, 200, 0.22);
@@ -51,10 +61,12 @@
     --bg: #120e22;
     --foreground: #f3efff;
     --muted: #a79dcf;
-    --glass-bg: rgba(38, 30, 66, 0.55);
-    --glass-scrim: rgba(28, 22, 50, 0.82);
-    --glass-border: rgba(255, 255, 255, 0.14);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --glass-bg: rgba(38, 30, 66, 0.34);
+    --glass-scrim: rgba(28, 22, 50, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.22);
+    --glass-border-hover: rgba(255, 255, 255, 0.34);
+    --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 8px 32px rgba(0, 0, 0, 0.45), 0 0 60px -14px rgba(165, 139, 255, 0.35);
     --accent: #a58bff;
     --accent-strong: #c0adff;
     --accent-wash: rgba(165, 139, 255, 0.18);
@@ -63,7 +75,7 @@
     --success: #4ddc9a;
     --surface: rgba(38, 30, 66, 0.62);
     --surface-translucent: rgba(38, 30, 66, 0.55);
-    --surface-2: rgba(50, 40, 84, 0.72);
+    --surface-2: rgba(50, 40, 84, 1);
     --border: rgba(255, 255, 255, 0.12);
     --border-strong: rgba(255, 255, 255, 0.22);
     --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35), 0 12px 34px -14px rgba(0, 0, 0, 0.5);
@@ -75,10 +87,12 @@
   --bg: #120e22;
   --foreground: #f3efff;
   --muted: #a79dcf;
-  --glass-bg: rgba(38, 30, 66, 0.55);
-  --glass-scrim: rgba(28, 22, 50, 0.82);
-  --glass-border: rgba(255, 255, 255, 0.14);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --glass-bg: rgba(38, 30, 66, 0.34);
+  --glass-scrim: rgba(28, 22, 50, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.22);
+  --glass-border-hover: rgba(255, 255, 255, 0.34);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.45), 0 0 60px -14px rgba(165, 139, 255, 0.35);
   --accent: #a58bff;
   --accent-strong: #c0adff;
   --accent-wash: rgba(165, 139, 255, 0.18);
@@ -87,7 +101,7 @@
   --success: #4ddc9a;
   --surface: rgba(38, 30, 66, 0.62);
   --surface-translucent: rgba(38, 30, 66, 0.55);
-  --surface-2: rgba(50, 40, 84, 0.72);
+  --surface-2: rgba(50, 40, 84, 1);
   --border: rgba(255, 255, 255, 0.12);
   --border-strong: rgba(255, 255, 255, 0.22);
   --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35), 0 12px 34px -14px rgba(0, 0, 0, 0.5);
@@ -115,8 +129,8 @@
    text directly on .glass alone. */
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-card);
   box-shadow: var(--glass-shadow);
@@ -245,7 +259,7 @@ body {
   position: absolute;
   border-radius: 50%;
   filter: blur(64px);
-  opacity: 0.55;
+  opacity: 0.62;
   will-change: transform;
 }
 
@@ -304,19 +318,22 @@ body {
    than --glass-bg, since nav labels are read continuously. */
 .nav-glass {
   background: var(--glass-scrim);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   border-bottom: 1px solid var(--glass-border);
 }
 
-/* Lift-on-hover for glass cards — subtle, spring-timed via --spring. */
+/* Lift-on-hover for glass cards — subtle, spring-timed via --spring. Border
+   brightens toward --glass-border-hover, a thin luminous rim that reads as
+   the card catching light rather than just moving. */
 .glass-hover {
   transition: transform 220ms var(--spring), box-shadow 220ms ease-out,
-    border-color 200ms ease-out;
+    border-color 220ms ease-out;
 }
 .glass-hover:hover {
-  transform: translateY(-3px);
+  transform: translateY(-3px) scale(1.006);
   box-shadow: var(--shadow-elevated);
+  border-color: var(--glass-border-hover);
 }
 
 /* Pill filter/tab chips — Sources page kind/region filters. */

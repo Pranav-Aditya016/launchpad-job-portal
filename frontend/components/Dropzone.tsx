@@ -47,8 +47,8 @@ export function Dropzone({ onFile, accept = ".pdf,.docx,.doc,.txt", disabled }: 
           ? undefined
           : {
               background: "var(--glass-scrim)",
-              WebkitBackdropFilter: "blur(var(--glass-blur)) saturate(160%)",
-              backdropFilter: "blur(var(--glass-blur)) saturate(160%)",
+              WebkitBackdropFilter: "blur(var(--glass-blur)) saturate(180%)",
+              backdropFilter: "blur(var(--glass-blur)) saturate(180%)",
             }
       }
     >
