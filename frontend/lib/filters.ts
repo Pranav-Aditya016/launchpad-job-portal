@@ -150,8 +150,42 @@ export function buildSourceOptions(
   return groups;
 }
 
-export function buildRegionOptions(jobs: Job[]): string[] {
-  const present = new Set<string>();
-  jobs.forEach((j) => present.add(j.region ?? ""));
-  return Array.from(present).sort();
+export interface RegionChoice {
+  code: string;
+  label: string;
+  count: number;
+}
+
+/**
+ * The region filter's options: every region the app knows about, each with how
+ * many of the current jobs sit in it.
+ *
+ * Deliberately driven by the canonical list rather than by the jobs on screen.
+ * Deriving options from the data means a region vanishes from the filter the
+ * moment it has no results — which is exactly the case where the user wants to
+ * pick it and see "0" rather than wonder where it went.
+ */
+export function buildRegionOptions(
+  jobs: Job[],
+  canonical: { code: string; label: string }[],
+): RegionChoice[] {
+  const counts = new Map<string, number>();
+  jobs.forEach((j) => {
+    const c = j.region ?? "";
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  });
+
+  const known = canonical.map((r) => ({
+    code: r.code,
+    label: r.label,
+    count: counts.get(r.code) ?? 0,
+  }));
+
+  // Anything the backend didn't name still deserves a row rather than becoming
+  // invisible and unfilterable.
+  const extra = [...counts.keys()]
+    .filter((c) => !canonical.some((r) => r.code === c))
+    .map((c) => ({ code: c, label: c ? c.toUpperCase() : "Unspecified", count: counts.get(c) ?? 0 }));
+
+  return [...known, ...extra];
 }

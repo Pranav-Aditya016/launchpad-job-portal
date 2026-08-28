@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from app import config as cfg
 from app.models import Job, job_id
@@ -213,3 +213,32 @@ def jobs_from_markdown(md: str, base_url: str, company: str, source_key: str) ->
             url=url,
         ))
     return jobs
+
+
+# A board URL is rarely one page. Following a handful keeps a paginated site
+# from contributing only its first screen, without turning into a crawler.
+MAX_PAGES = 5
+_PAGE_PARAMS = ("page", "p", "pg", "offset", "start")
+
+
+def page_urls(url: str, max_pages: int = MAX_PAGES) -> list[str]:
+    """`url` plus the next few pages, if it carries a page parameter.
+
+    Returns just the original when there is nothing to walk — guessing at
+    pagination on a URL that has none would fetch the same page repeatedly.
+    """
+    parsed = urlparse(url)
+    params = parse_qsl(parsed.query, keep_blank_values=True)
+    key = next((k for k, _ in params if k.lower() in _PAGE_PARAMS), None)
+    if key is None or max_pages <= 1:
+        return [url]
+    try:
+        start = int(dict(params)[key])
+    except (ValueError, KeyError):
+        return [url]
+
+    out = []
+    for i in range(max_pages):
+        page = [(k, str(start + i) if k == key else v) for k, v in params]
+        out.append(urlunparse(parsed._replace(query=urlencode(page))))
+    return out

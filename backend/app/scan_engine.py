@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app import region as region_infer
 from app.models import Job, Profile, ScanRun, SourceResult
 from app.sources import registry
 from app.sources.base import FetchContext, SourceKind, SourceUnavailable
@@ -130,8 +131,11 @@ async def _run_one(src, enabled, ctx_factory, limiter, connected_portals) -> tup
         jobs = await asyncio.wait_for(src.fetch(ctx), timeout=PER_SOURCE_TIMEOUT_S)
         jobs = list(jobs or [])[: meta.daily_cap]
         for j in jobs:
-            if not j.region and meta.regions:
-                j.region = meta.regions[0]
+            # Where the JOB is, not where the source nominally covers. Copying
+            # meta.regions[0] made every Greenhouse posting "global" whether it
+            # was in Bengaluru or Berlin, which left the region filter useless.
+            hint = meta.regions[0] if len(meta.regions) == 1 else ""
+            j.region = region_infer.for_job(j, source_hint=hint)
         result.jobs_found = len(jobs)
         result.status = "ok" if jobs else "empty"
         if not jobs:

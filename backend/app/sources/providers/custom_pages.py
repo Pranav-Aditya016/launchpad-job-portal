@@ -46,32 +46,45 @@ def _anchors_as_markdown(html: str) -> str:
 async def _fetch_one(ctx: FetchContext, site: cs.CustomSite) -> tuple[list[Job], str, str]:
     """(jobs, status, detail) for one user-added site. Never raises."""
     source_key = f"custom:{site.id}"
-    try:
-        r = await ctx.client.get(site.url)
-        r.raise_for_status()
-        html = r.text
-    except Exception as e:
-        return [], "error", f"{type(e).__name__}: {e}"[:200]
+    pages = cs.page_urls(site.url)
+    jobs: list[Job] = []
+    seen: set[str] = set()
+    first_error = ""
 
-    jobs = cs.jobs_from_markdown(
-        _anchors_as_markdown(html), base_url=site.url,
-        company=site.label, source_key=source_key,
-    )
-    for j in jobs:
-        j.region = (site.regions or ["global"])[0]
+    for page_url in pages:
+        try:
+            r = await ctx.client.get(page_url)
+            r.raise_for_status()
+            html = r.text
+        except Exception as e:
+            # One bad page must not lose the pages that worked.
+            first_error = first_error or f"{type(e).__name__}: {e}"[:200]
+            continue
 
+        found = cs.jobs_from_markdown(
+            _anchors_as_markdown(html), base_url=page_url,
+            company=site.label, source_key=source_key,
+        )
+        new_here = [j for j in found if j.url not in seen]
+        for j in new_here:
+            seen.add(j.url)
+        jobs.extend(new_here)
+        # A page that adds nothing new means we've run past the end of the
+        # listing (many boards echo page 1 forever). Stop rather than loop.
+        if not new_here:
+            break
+
+    if not jobs and first_error:
+        return [], "error", first_error
     if jobs:
-        return jobs, "ok", ""
+        note = f"{len(pages)} page(s) followed" if len(pages) > 1 else ""
+        return jobs, "ok", note
 
-    looks_js = len(_ANCHOR.findall(html)) < 5 and len(html) > 2000
-    detail = (
-        "no job-shaped links found — the page looks JavaScript-rendered, so the "
-        "listings probably load after the HTML does"
-        if looks_js else
+    return [], "empty", (
         "no job-shaped links found — check the URL points at a job LIST page "
-        "(e.g. /careers or /jobs) rather than the homepage"
+        "(e.g. /careers or /jobs) rather than the homepage. If the site renders "
+        "its listings with JavaScript, the links aren't in the HTML we fetch."
     )
-    return [], "empty", detail
 
 
 @register

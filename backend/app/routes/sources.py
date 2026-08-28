@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app import custom_sources as cs
+from app import region as region_mod
 from app import store
 from app.sources import registry
 
@@ -32,6 +33,21 @@ def _last_results() -> dict[str, dict]:
     if not runs:
         return {}
     return {r.key: r.model_dump() for r in runs[0].results}
+
+
+@router.get("/regions")
+def list_regions():
+    """The complete region list for the dashboard filter.
+
+    Served from a fixed list rather than derived from whatever jobs happen to
+    be stored: a filter built from present data can only ever offer the regions
+    you already have, so "India" would vanish on any day nothing Indian was
+    scraped — exactly when you most want to notice.
+    """
+    return {
+        "regions": [{"code": c, "label": l} for c, l in region_mod.ALL_REGIONS]
+        + [{"code": "", "label": "Unspecified"}]
+    }
 
 
 @router.get("/sources")

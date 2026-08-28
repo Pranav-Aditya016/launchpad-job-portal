@@ -11,6 +11,7 @@ import {
   getProfile,
   getSources,
   runNow,
+  listRegions,
   type CustomSite,
   type Job,
   type Profile,
@@ -54,6 +55,7 @@ export default function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanWarnings, setScanWarnings] = useState<string[]>([]);
   const [lastRun, setLastRun] = useState<RunNowResponse | null>(null);
+  const [canonicalRegions, setCanonicalRegions] = useState<{ code: string; label: string }[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -80,6 +82,25 @@ export default function DashboardPage() {
       }
     }
     bootstrap();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  // The canonical region list. Fetched once; if the backend is unreachable the
+  // filter falls back to whatever regions the loaded jobs happen to carry, so
+  // it degrades to the old behaviour rather than to an empty dropdown.
+  useEffect(() => {
+    let ignore = false;
+    async function loadRegions() {
+      try {
+        const res = await listRegions();
+        if (!ignore) setCanonicalRegions(res.regions);
+      } catch {
+        // leave it empty — buildRegionOptions still derives from the jobs
+      }
+    }
+    loadRegions();
     return () => {
       ignore = true;
     };
@@ -147,7 +168,10 @@ export default function DashboardPage() {
     () => buildSourceOptions(jobs, sources, customSites),
     [jobs, sources, customSites]
   );
-  const regionOptions = useMemo(() => buildRegionOptions(jobs), [jobs]);
+  const regionOptions = useMemo(
+    () => buildRegionOptions(jobs, canonicalRegions),
+    [jobs, canonicalRegions],
+  );
   const filteredJobs = useMemo(() => applyFilters(jobs, filters), [jobs, filters]);
 
   function startTimer() {

@@ -379,3 +379,19 @@ export function runNow(body: RunNowRequest = {}): Promise<RunNowResponse> {
 }
 
 export { ApiError, API_URL };
+
+
+// GET /regions — the canonical region list for the filter.
+//
+// Served by the backend rather than derived from the jobs on screen: a filter
+// built from present data can only offer the regions you already have, so
+// "India" would silently disappear on any day nothing Indian was scraped —
+// precisely when you'd want to notice it was missing.
+export interface RegionOption {
+  code: string;
+  label: string;
+}
+
+export function listRegions(): Promise<{ regions: RegionOption[] }> {
+  return request<{ regions: RegionOption[] }>("/regions");
+}

@@ -136,3 +136,35 @@ def test_jobs_carry_the_custom_source_key_so_provenance_survives():
 def test_a_page_with_no_job_links_yields_nothing_rather_than_junk():
     md = "[Home](https://acme.com/) [Contact](https://acme.com/contact)"
     assert cs.jobs_from_markdown(md, "https://acme.com", "Acme", "custom:1") == []
+
+
+# --- pagination -------------------------------------------------------------
+
+def test_page_urls_walks_a_page_parameter():
+    """A board URL like ?page=0 has more behind it. One page is not the site."""
+    urls = cs.page_urls("https://jobfound.org/?page=0&loc=India", max_pages=3)
+    assert urls == [
+        "https://jobfound.org/?page=0&loc=India",
+        "https://jobfound.org/?page=1&loc=India",
+        "https://jobfound.org/?page=2&loc=India",
+    ]
+
+
+def test_page_urls_respects_a_non_zero_start():
+    urls = cs.page_urls("https://x.com/jobs?page=2", max_pages=2)
+    assert urls == ["https://x.com/jobs?page=2", "https://x.com/jobs?page=3"]
+
+
+def test_page_urls_without_a_page_param_returns_just_the_one():
+    urls = cs.page_urls("https://acme.com/careers", max_pages=5)
+    assert urls == ["https://acme.com/careers"]
+
+
+def test_page_urls_handles_alternative_param_names():
+    assert cs.page_urls("https://x.com/j?p=1", max_pages=2) == [
+        "https://x.com/j?p=1", "https://x.com/j?p=2",
+    ]
+
+
+def test_page_urls_never_returns_more_than_the_cap():
+    assert len(cs.page_urls("https://x.com/j?page=0", max_pages=1)) == 1

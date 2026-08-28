@@ -15,7 +15,7 @@ interface FilterPanelProps {
   filters: DashboardFilters;
   onChange: (patch: Partial<DashboardFilters>) => void;
   sourceGroups: Map<string, SourceOption[]>;
-  regionOptions: string[];
+  regionOptions: { code: string; label: string; count: number }[];
   resultCount: number;
   totalCount: number;
   onClear: () => void;
@@ -104,8 +104,8 @@ export function FilterPanel({
           >
             <option value="all">All regions</option>
             {regionOptions.map((r) => (
-              <option key={r || "unspecified"} value={r}>
-                {r ? r.toUpperCase() : "Unspecified"}
+              <option key={r.code || "unspecified"} value={r.code}>
+                {r.label} ({r.count})
               </option>
             ))}
           </select>
