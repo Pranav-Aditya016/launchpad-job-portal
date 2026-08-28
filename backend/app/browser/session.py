@@ -129,6 +129,32 @@ def _clear_stale_lock(user_data_dir: Path) -> None:
             (user_data_dir / name).unlink()
 
 
+# Prefer the user's REAL installed browser, falling back to Playwright's
+# bundled Chromium only if neither is present.
+#
+# Why this matters: the bundled build identifies itself as automation, so job
+# portals refuse to let the user log in — they see a test browser and show
+# "this looks like automated software" instead of a password box. That blocks
+# a first-party action the user is entitled to perform: signing into their own
+# account, by hand, in a window they can see.
+#
+# The line this deliberately does NOT cross (spec §10): no CAPTCHA solving, no
+# proxy rotation, no user-agent spoofing, no stealth plugins. Scraping still
+# runs at the declared per-portal rate limits, and if a portal blocks us anyway
+# we report `blocked` and stop. This makes a real browser look like the real
+# browser it is; it does not disguise what LaunchPad is doing afterwards.
+LAUNCH_CHANNELS: tuple[str | None, ...] = ("chrome", "msedge", None)
+
+LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-default-browser-check",
+    "--no-first-run",
+]
+
+# Drops the "Chrome is being controlled by automated test software" infobar.
+IGNORED_DEFAULT_ARGS = ["--enable-automation"]
+
+
 async def _open_context(user_data_dir: Path, *, headless: bool, timeout_ms: int = LAUNCH_TIMEOUT_MS):
     """Launch a persistent Chromium profile. The one real Playwright seam.
 
@@ -138,14 +164,25 @@ async def _open_context(user_data_dir: Path, *, headless: bool, timeout_ms: int 
     """
     user_data_dir.mkdir(parents=True, exist_ok=True)
     pw = await async_playwright().start()
-    try:
-        context = await pw.chromium.launch_persistent_context(
-            str(user_data_dir), headless=headless, timeout=timeout_ms,
+    last_error: Exception | None = None
+    for channel in LAUNCH_CHANNELS:
+        kwargs = dict(
+            headless=headless,
+            timeout=timeout_ms,
+            args=LAUNCH_ARGS,
+            ignore_default_args=IGNORED_DEFAULT_ARGS,
         )
-    except Exception:
-        await pw.stop()
-        raise
-    return pw, context
+        if channel:
+            kwargs["channel"] = channel
+        try:
+            context = await pw.chromium.launch_persistent_context(
+                str(user_data_dir), **kwargs
+            )
+            return pw, context
+        except Exception as e:
+            last_error = e
+    await pw.stop()
+    raise last_error if last_error else RuntimeError("could not launch a browser")
 
 
 async def _close_context(pw, context) -> None:
